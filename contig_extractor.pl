@@ -28,6 +28,7 @@ use warnings;
 #core Perl modules
 use Getopt::Long;
 use Bio::SeqIO;
+use Pod::Usage;
 #CPAN modules
 
 #locally-written modules
@@ -107,16 +108,11 @@ sub checkParams {
 
     # if no arguments supplied print the usage and exit
     #
-   if (0 == (keys (%options) ))
-   		{
-   		usage() and die;
-		}
+   pod2usage if (0 == (keys (%options) ));
+
     # If the -help option is set, print the usage and exit
     #
-    if ($options{'help'})
-    	{
-    	help() and die;
-    	}
+    pod2usage if ($options{'help'});
 
     return \%options;
 }
@@ -135,49 +131,47 @@ print<<"EOF";
 EOF
 }
 
-sub usage {
+__DATA__
 
-print "contig_extractor -i QUERY_FILE -s SUBJECT_FILE -o FILE_NAME [-sf] FORMAT [-help] \n";
-}
-sub help{
-print "
+=head1 NAME
+	
+ contig_extractor
 
-   $0
+=head1 COPYRIGHT
+ 
+ copyright (C) 2010, 2011 Connor Skennerton
+ 
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ 
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ 
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-
-   copyright (C) 2010 Connor Skennerton
-
-   This program is free software: you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation, either version 3 of the License, or
-   (at your option) any later version.
-
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
-
-   You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-DESCRIPTION
+=head1 DESCRIPTION
    
    used for extracting whole contigs from a multiple fasta file that contain 
    significant matches to reads/sequences/contigs from an m8 or m9 blast output file
 
+=head1 SYNOPSIS
+ 
+ contig_extractor -i QUERY_FILE -s SUBJECT_FILE -o FILE_NAME [-sf] FORMAT [-help]
 
-SYNOPSIS\n\n";
-
-   usage();
-print"
       [-help]           Displays basic usage information
-      [-sf]				the format of the file containing the contigs,the default is fasta    						
-      -s				name of the subject file containing the contigs
-      -q				name of the m8 blast file containing the matches to the contigs
-      -o				name of the output file
+      [-sf]             The format of the file containing the contigs,the default is fasta    						
+      -s                Name of the subject file containing the contigs
+      -i                Name of the m8 blast file containing the matches to the contigs
+      -o                Name of the output file
+      [-h]              Use the hit (second column of blast table) to populate the list [default: use query]
+      [-l]              Use a list of identifiers (one per line) to populate the list
       
-";
-}
 
-exit;
+
+=cut
 
