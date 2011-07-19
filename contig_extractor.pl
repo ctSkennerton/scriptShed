@@ -4,7 +4,7 @@
 #    this script extracts sequences from a multiple fasta file based on the 
 #	 matches obtained from a blast file in m8 format
 #
-#    Copyright (C) 2010 Connor Skennerton
+#    Copyright (C) 2010, 2011 Connor Skennerton
 #
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -45,40 +45,73 @@ BEGIN
 
 my $options = checkParams();
 
-my $query = $options->{"i"};
-my $subject = $options->{"s"};
-my $outfile = ">".$options->{"o"};
-my $sf = 'fasta';
-if (exists ($options->{"sf"}))
-	{
-	$sf = $options->{"sf"};
-	}
+my $query = $options->{"input"};
+my $database = $options->{"database"};
+my $outfile = $options->{"output"};
+
+my $database_format = 'fasta';
+if (exists ($options->{"database_format"}))
+{
+  $database_format = $options->{"database_format"};
+}
+my $outfile_format = $database_format;
+if (exists ($options->{'output_format'}))
+{
+  $outfile_format = $options->{'output_format'};
+}
 
 open(QUERY, $query) or die;
-open(OUT, $outfile) or die;
 
 my %seqs;
-my %contigs;
-
-my $seq_in = Bio::SeqIO->new('-file' => $subject,
-                             	 '-format' => $sf);
-while (my $seqobj = $seq_in->next_seq())
-		{
-		$contigs{$seqobj->primary_id} = $seqobj->seq();
-		}
 
 while (my $line = <QUERY>) 
 {
 	chomp $line;
-	my @columns = split(/\s+/, $line);
-
-	if (exists $options->{'l'})
+	if($options->{'list'})
 	{
-		$seqs{$line} = 1;
-		next;
-	}
+        list($line);
+     }
+     elsif ($options->{'blast'})
+     {
+        blast($line);
+     }
+     else
+     {
+        sam($line);
+     }
+}
+close QUERY;
 
-	elsif (exists $options->{'h'})
+my $seq_in = Bio::SeqIO->new('-file' => $database,
+                             	 '-format' => $database_format);
+
+my $seq_out = Bio::SeqIO->new('-file' => '>'.$outfile, '-format' => $outfile_format);
+while (my $seqobj = $seq_in->next_seq())
+{
+	if (exists $seqs{$seqobj->primary_id})
+	{
+     	unless($options->{'inverse'})
+     	{
+           	$seq_out->write($seqobj);
+     	}
+	}
+	elsif ($options->{'inverse'})
+	{
+     	$seq_out->write($seqobj);
+	}
+}
+
+printAtStart();
+
+sub list{
+  	my ($line) = shift;
+	$seqs{$line} = 1;
+}
+
+sub blast{
+  my ($line) = shift;
+  my @columns = split(/\t/, $line);
+  	if (exists $options->{'subject'})
 	{
 		$seqs{$columns[1]} = $columns[0];
 	}
@@ -86,21 +119,21 @@ while (my $line = <QUERY>)
 	{
 		$seqs{$columns[0]} = $columns[1];
 	}
-	
 }
-close QUERY;
-foreach my $match (sort keys %seqs)
-	{                                                                                 
-    print OUT ">$match\n";                                                                                                         
-    print OUT "$contigs{$match}\n";
-	}	
-		
-close OUT;
-	
 
-printAtStart();
-sub checkParams {
-    my @standard_options = ( "help+", "i:s", "s:s", "o:s", "sf:s", "l|list:+", "h|hit:+" );
+sub sam{ 
+  my ($line) = shift;
+  if ($line !~ /\*\t0\t0\t\*\t\*\t0\t0/) 
+    {
+      my @columns = split(/\t/, $line);
+      $seqs{$columns[0]} = 1;
+    }
+}
+
+
+sub checkParams 
+{
+    my @standard_options = ( "i|input:s", "if|input_format:s", "d|database:s", "s|subject:s", "o|output:s", "of|output_format:s", "df|database_format:s", "l|list:+", "b|blast:+", "S|sam:+", "h|help:+", "v|inverse:+" );
     my %options;
 
     # Add any other command line options, and the code to handle them
@@ -113,7 +146,10 @@ sub checkParams {
     # If the -help option is set, print the usage and exit
     #
     pod2usage if ($options{'help'});
-
+    
+    pod2usage('-msg' => "please select one of the list, blast or sam options\n") unless ($options{'sam'} && $options{'blast'} && $options{'list'});
+    
+    pod2usage('-msg' => "The subject flag can only be specified with the blast flag\n") if ($options->{'subject'} && !$options->{'blast'});
     return \%options;
 }
 
@@ -161,7 +197,9 @@ __DATA__
 
 =head1 SYNOPSIS
  
- contig_extractor -i QUERY_FILE -s SUBJECT_FILE -o FILE_NAME [-sf] FORMAT [-help]
+ contig_extractor -i|input FILE  -d|database SEQUENCE_FILE -o|output FILE {-l|list || -b|blast || -S|sam }  
+                  [-s|subject] [-if|input_format FORMAT] [-of|output_format FORMAT] [-df|database_format FORMAT] 
+                  [-h|help] [-v|inverse] 
 
       [-help]           Displays basic usage information
       [-sf]             The format of the file containing the contigs,the default is fasta    						
