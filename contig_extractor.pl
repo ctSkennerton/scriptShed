@@ -45,33 +45,23 @@ BEGIN
 
 my $options = checkParams();
 
-my $query = $options->{"input"};
-my $database = $options->{"database"};
-my $outfile = $options->{"output"};
+my $query = $options->{'i'};
+my $database = $options->{'d'};
+my $outfile = $options->{'o'};
 
-my $database_format = 'fasta';
-if (exists ($options->{"database_format"}))
-{
-  $database_format = $options->{"database_format"};
-}
-my $outfile_format = $database_format;
-if (exists ($options->{'output_format'}))
-{
-  $outfile_format = $options->{'output_format'};
-}
 
 open(QUERY, $query) or die;
 
 my %seqs;
-
+printAtStart();
 while (my $line = <QUERY>) 
 {
 	chomp $line;
-	if($options->{'list'})
+	if($options->{'l'})
 	{
         list($line);
      }
-     elsif ($options->{'blast'})
+     elsif ($options->{'b'})
      {
         blast($line);
      }
@@ -82,26 +72,37 @@ while (my $line = <QUERY>)
 }
 close QUERY;
 
-my $seq_in = Bio::SeqIO->new('-file' => $database,
-                             	 '-format' => $database_format);
-
-my $seq_out = Bio::SeqIO->new('-file' => '>'.$outfile, '-format' => $outfile_format);
-while (my $seqobj = $seq_in->next_seq())
-{
-	if (exists $seqs{$seqobj->primary_id})
+my @aux = undef;
+my ($name, $seq, $qual);
+open(DB,$database) or die;
+open(OUT, >, $options->{'o'}) or die;
+while (($name, $seq, $qual) = readfq(\*DB, \@aux)) {
+	if (exists $seqs{$name})
 	{
-     	unless($options->{'inverse'})
+     	unless($options->{'v'})
      	{
-           	$seq_out->write($seqobj);
+           	print_seq(\$name,\$seq,\$qual, \*OUT);
      	}
 	}
-	elsif ($options->{'inverse'})
+	elsif ($options->{'v'})
 	{
-     	$seq_out->write($seqobj);
+           	print_seq(\$name,\$seq,\$qual, \*OUT);
 	}
 }
 
-printAtStart();
+
+sub print_seq{
+  my ($name_ref, $seq_ref, $qual_ref, $fh) = @_;
+  if (defined $$qual_ref)
+  {
+    # fastq file
+    print $fh "@".$$name_ref."\n".$$seq_ref."\n+".$$name_ref."\n".$$qual_ref."\n";
+  }
+  else
+  {
+    print $fh ">".$$name_ref."\n".$$seq_ref."\n";
+  }
+}
 
 sub list{
   	my ($line) = shift;
@@ -111,7 +112,7 @@ sub list{
 sub blast{
   my ($line) = shift;
   my @columns = split(/\t/, $line);
-  	if (exists $options->{'subject'})
+  	if (exists $options->{'s'})
 	{
 		$seqs{$columns[1]} = $columns[0];
 	}
@@ -130,10 +131,56 @@ sub sam{
     }
 }
 
+sub fasta{
+  
+
+}
+sub readfq {
+	my ($fh, $aux) = @_;
+	@$aux = [undef, 0] if (!defined(@$aux));
+	return if ($aux->[1]);
+	if (!defined($aux->[0])) {
+		while (<$fh>) {
+			chomp;
+			if (substr($_, 0, 1) eq '>' || substr($_, 0, 1) eq '@') {
+				$aux->[0] = $_;
+				last;
+			}
+		}
+		if (!defined($aux->[0])) {
+			$aux->[1] = 1;
+			return;
+		}
+	}
+	my $name = /^.(\S+)/? $1 : '';
+	my $seq = '';
+	my $c;
+	$aux->[0] = undef;
+	while (<$fh>) {
+		chomp;
+		$c = substr($_, 0, 1);
+		last if ($c eq '>' || $c eq '@' || $c eq '+');
+		$seq .= $_;
+	}
+	$aux->[0] = $_;
+	$aux->[1] = 1 if (!defined($aux->[0]));
+	return ($name, $seq) if ($c ne '+');
+	my $qual = '';
+	while (<$fh>) {
+		chomp;
+		$qual .= $_;
+		if (length($qual) >= length($seq)) {
+			$aux->[0] = undef;
+			return ($name, $seq, $qual);
+		}
+	}
+	$aux->[1] = 1;
+	return ($name, $seq);
+}
 
 sub checkParams 
 {
-    my @standard_options = ( "i|input:s", "if|input_format:s", "d|database:s", "s|subject:s", "o|output:s", "of|output_format:s", "df|database_format:s", "l|list:+", "b|blast:+", "S|sam:+", "h|help:+", "v|inverse:+" );
+    my @standard_options = ( "i:s", "d:s", "s:s", "o:s", "l+", "b+", "S+", "h+", "v+" );
     my %options;
 
     # Add any other command line options, and the code to handle them
@@ -147,9 +194,9 @@ sub checkParams
     #
     pod2usage if ($options{'help'});
     
-    pod2usage('-msg' => "please select one of the list, blast or sam options\n") unless ($options{'sam'} && $options{'blast'} && $options{'list'});
+    pod2usage('-msg' => "please select one of the list, blast or sam options\n") unless ($options{'s'} || $options{'b'} || $options{'l'});
     
-    pod2usage('-msg' => "The subject flag can only be specified with the blast flag\n") if ($options->{'subject'} && !$options->{'blast'});
+    pod2usage('-msg' => "The subject flag can only be specified with the blast flag\n") if ($options->{'s'} && !$options->{'b'});
     return \%options;
 }
 
@@ -197,9 +244,7 @@ __DATA__
 
 =head1 SYNOPSIS
  
- contig_extractor -i|input FILE  -d|database SEQUENCE_FILE -o|output FILE {-l|list || -b|blast || -S|sam }  
-                  [-s|subject] [-if|input_format FORMAT] [-of|output_format FORMAT] [-df|database_format FORMAT] 
-                  [-h|help] [-v|inverse] 
+ contig_extractor -i FILE -l|b|S -d SEQUENCE_FILE -o FILE [-s] [-h] [-v] 
 
       [-help]           Displays basic usage information
       [-sf]             The format of the file containing the contigs,the default is fasta    						
@@ -208,6 +253,9 @@ __DATA__
       -o                Name of the output file
       [-h]              Use the hit (second column of blast table) to populate the list [default: use query]
       [-l]              Use a list of identifiers (one per line) to populate the list
+      [-b]              Use a m8 blast file as the input
+      [-S]              Use a sam file as the input
+      [-v]              Invert the match
       
 
 
