@@ -75,7 +75,7 @@ close QUERY;
 my @aux = undef;
 my ($name, $seq, $qual);
 open(DB,$database) or die;
-open(OUT, >, $options->{'o'}) or die;
+open(OUT, ">", $options->{'o'}) or die;
 while (($name, $seq, $qual) = readfq(\*DB, \@aux)) {
 	if (exists $seqs{$name})
 	{
