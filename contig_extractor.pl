@@ -26,7 +26,7 @@ use strict;
 use warnings;
 
 #core Perl modules
-use Getopt::Long;
+use Getopt::Std;
 use Bio::SeqIO;
 use Pod::Usage;
 #CPAN modules
@@ -45,6 +45,7 @@ BEGIN
 
 my $options = checkParams();
 
+
 my $query = $options->{'i'};
 my $database = $options->{'d'};
 my $outfile = $options->{'o'};
@@ -54,21 +55,34 @@ open(QUERY, $query) or die;
 
 my %seqs;
 printAtStart();
-while (my $line = <QUERY>) 
+
+if($options->{'f'})
 {
-	chomp $line;
-	if($options->{'l'})
-	{
-        list($line);
-     }
-     elsif ($options->{'b'})
-     {
-        blast($line);
-     }
-     else
-     {
-        sam($line);
-     }
+    my @aux = undef;
+    my ($name, $seq, $qual);
+    while (($name, $seq, $qual) = readfq(\*QUERY, \@aux)) 
+    {
+        $seqs{$name} = 1;
+    }
+}
+else
+{
+    while (my $line = <QUERY>) 
+    {
+        chomp $line;
+        if($options->{'l'})
+        {
+            list($line);
+        }
+        elsif ($options->{'b'})
+        {
+            blast($line);
+        }
+        else
+        {
+            sam($line);
+        }
+    }
 }
 close QUERY;
 
@@ -76,7 +90,8 @@ my @aux = undef;
 my ($name, $seq, $qual);
 open(DB,$database) or die;
 open(OUT, ">", $options->{'o'}) or die;
-while (($name, $seq, $qual) = readfq(\*DB, \@aux)) {
+while (($name, $seq, $qual) = readfq(\*DB, \@aux)) 
+{
 	if (exists $seqs{$name})
 	{
      	unless($options->{'v'})
@@ -104,37 +119,6 @@ sub print_seq{
   }
 }
 
-sub list{
-  	my ($line) = shift;
-	$seqs{$line} = 1;
-}
-
-sub blast{
-  my ($line) = shift;
-  my @columns = split(/\t/, $line);
-  	if (exists $options->{'s'})
-	{
-		$seqs{$columns[1]} = $columns[0];
-	}
-	else
-	{
-		$seqs{$columns[0]} = $columns[1];
-	}
-}
-
-sub sam{ 
-  my ($line) = shift;
-  if ($line !~ /\*\t0\t0\t\*\t\*\t0\t0/) 
-    {
-      my @columns = split(/\t/, $line);
-      $seqs{$columns[0]} = 1;
-    }
-}
-
-sub fasta{
-  
-
-}
 sub readfq {
 	my ($fh, $aux) = @_;
 	@$aux = [undef, 0] if (!defined(@$aux));
@@ -178,25 +162,69 @@ sub readfq {
 	return ($name, $seq);
 }
 
+sub list{
+  	my ($line) = shift;
+	$seqs{$line} = 1;
+}
+
+sub blast{
+  my ($line) = shift;
+  my @columns = split(/\t/, $line);
+  	if (exists $options->{'s'})
+	{
+		$seqs{$columns[1]} = $columns[0];
+	}
+	else
+	{
+		$seqs{$columns[0]} = $columns[1];
+	}
+}
+
+sub sam{ 
+  my ($line) = shift;
+  if ($line !~ /\*\t0\t0\t\*\t\*\t0\t0/) 
+    {
+      my @columns = split(/\t/, $line);
+      $seqs{$columns[0]} = 1;
+    }
+}
+
+sub fasta{
+  
+
+}
+
+
 sub checkParams 
 {
-    my @standard_options = ( "i:s", "d:s", "s:s", "o:s", "l+", "b+", "S+", "h+", "v+" );
     my %options;
 
     # Add any other command line options, and the code to handle them
-    GetOptions( \%options, @standard_options );
+    getopts( "i:d:so:lbShvf",\%options );
 
     # if no arguments supplied print the usage and exit
     #
    pod2usage if (0 == (keys (%options) ));
 
-    # If the -help option is set, print the usage and exit
+    # If the -h option is set, print the usage and exit
     #
-    pod2usage if ($options{'help'});
+    pod2usage if ($options{'h'});
+        
+    unless ($options{'S'} || $options{'b'} || $options{'l'} || $options{'f'} )
+    {
+        pod2usage('-msg' => "Please specify one of  -S -b -l -f");
+    }
+    unless ($options{'i'} && $options{'d'} && $options{'o'})
+    {
+        pod2usage('-msg' => "You must specify -i -d -o");
+    }
     
-    pod2usage('-msg' => "please select one of the list, blast or sam options\n") unless ($options{'s'} || $options{'b'} || $options{'l'});
+    if (defined $options{'s'} && !(defined $options{'b'}))
+    {
+        pod2usage('-msg' => "The subject flag can only be specified with the blast flag\n");
+    }
+
     
-    pod2usage('-msg' => "The subject flag can only be specified with the blast flag\n") if ($options->{'s'} && !$options->{'b'});
     return \%options;
 }
 
@@ -244,17 +272,19 @@ __DATA__
 
 =head1 SYNOPSIS
  
- contig_extractor -i FILE -l|b|S -d SEQUENCE_FILE -o FILE [-s] [-h] [-v] 
+ contig_extractor -i FILE -l|b|S|f -d SEQUENCE_FILE -o FILE [-subject] [-h] [-v] 
 
       [-help]           Displays basic usage information
       [-sf]             The format of the file containing the contigs,the default is fasta    						
-      -s                Name of the subject file containing the contigs
-      -i                Name of the m8 blast file containing the matches to the contigs
+      -d                Name of the subject file containing the contigs
+      -i                Name of the file containing the matches to the contigs
       -o                Name of the output file
       [-h]              Use the hit (second column of blast table) to populate the list [default: use query]
       [-l]              Use a list of identifiers (one per line) to populate the list
       [-b]              Use a m8 blast file as the input
+      [-subject]        Generate headers based on the subject of a blast file.  default is to use the query
       [-S]              Use a sam file as the input
+      [-f]              Use a fasta/fastq file as the input
       [-v]              Invert the match
       
 
