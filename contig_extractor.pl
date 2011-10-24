@@ -107,16 +107,16 @@ while (($name, $seq, $qual) = readfq(\*DB, \@aux))
 
 
 sub print_seq{
-  my ($name_ref, $seq_ref, $qual_ref, $fh) = @_;
-  if (defined $$qual_ref)
-  {
-    # fastq file
-    print $fh "@".$$name_ref."\n".$$seq_ref."\n+".$$name_ref."\n".$$qual_ref."\n";
-  }
-  else
-  {
-    print $fh ">".$$name_ref."\n".$$seq_ref."\n";
-  }
+    my ($name_ref, $seq_ref, $qual_ref, $fh) = @_;
+    if (defined $$qual_ref)
+    {
+        # fastq file
+        print $fh "@".$$name_ref."\n".$$seq_ref."\n+".$$name_ref."\n".$$qual_ref."\n";
+    }
+    else
+    {
+        print $fh ">".$$name_ref."\n".$$seq_ref."\n";
+    }
 }
 
 sub readfq {
@@ -181,17 +181,12 @@ sub blast{
 }
 
 sub sam{ 
-  my ($line) = shift;
-  if ($line !~ /\*\t0\t0\t\*\t\*\t0\t0/) 
+    my ($line) = shift;
+    if ($line !~ /\*\t0\t0\t\*\t\*\t0\t0/) 
     {
-      my @columns = split(/\t/, $line);
-      $seqs{$columns[0]} = 1;
+        my @columns = split(/\t/, $line);
+        $seqs{$columns[0]} = 1;
     }
-}
-
-sub fasta{
-  
-
 }
 
 
