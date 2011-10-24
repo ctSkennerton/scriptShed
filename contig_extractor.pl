@@ -27,7 +27,6 @@ use warnings;
 
 #core Perl modules
 use Getopt::Std;
-use Bio::SeqIO;
 use Pod::Usage;
 #CPAN modules
 
