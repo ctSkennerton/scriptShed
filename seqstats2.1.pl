@@ -27,7 +27,6 @@
 use Getopt::Long;
 use Pod::Usage;
 use Bio::SeqIO;
-use Bio::Tools::Seqstats;
 use Data::Dumper;
 #CPAN modules
 

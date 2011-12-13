@@ -56,18 +56,19 @@ for my $feat_object ($seq_object->get_SeqFeatures)
 {
     if ($feat_object->primary_tag eq "$target_feature") 
     {
+        print OUT_FILE ">", $target_feature, "\t",$feat_object->start, "_", $feat_object->end,"\t";
         for my $tag ($feat_object->get_all_tags) 
         {  
             if( $tag =~ /note/)
             { 
                 for my $value ($feat_object->get_tag_values($tag))
                 {
-                    print OUT_FILE "$value\t";
+                    print OUT_FILE "'$value'";
                     last;
                 }
              }
         }
-        print OUT_FILE ">", $target_feature, "\t",$feat_object->start, "_", $feat_object->end, "\n", $feat_object->spliced_seq->seq,"\n";
+        print OUT_FILE "\n", $feat_object->spliced_seq->seq,"\n";
     }
 }
 
