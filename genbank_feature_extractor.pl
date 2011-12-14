@@ -56,19 +56,22 @@ for my $feat_object ($seq_object->get_SeqFeatures)
 {
     if ($feat_object->primary_tag eq "$target_feature") 
     {
-        print OUT_FILE ">", $target_feature, "\t",$feat_object->start, "_", $feat_object->end,"\t";
-        for my $tag ($feat_object->get_all_tags) 
-        {  
-            if( $tag =~ /note/)
-            { 
-                for my $value ($feat_object->get_tag_values($tag))
-                {
-                    print OUT_FILE "'$value'";
-                    last;
-                }
-             }
-        }
-        print OUT_FILE "\n", $feat_object->spliced_seq->seq,"\n";
+        print OUT_FILE ">", $target_feature, "/",$feat_object->start, "-", $feat_object->end;
+        if(defined $options->{'d'})
+        {
+          for my $tag ($feat_object->get_all_tags) 
+          {
+              if( $tag =~ /$options->{'d'}/)
+              {
+                  for my $value ($feat_object->get_tag_values($tag))
+                  {
+                      print OUT_FILE "\t'$value'";
+                      last;
+                  }
+               }
+          }
+      }
+      print OUT_FILE "\n", $feat_object->spliced_seq->seq,"\n";
     }
 }
 
@@ -76,7 +79,7 @@ for my $feat_object ($seq_object->get_SeqFeatures)
 close OUT_FILE;
 
 sub checkParams {
-    my @standard_options = ( "help+", "in:s", "out:s", "f:s" );
+    my @standard_options = ( "help+", "in:s", "out:s", "f:s","d:s" );
     my %options;
 
     # Add any other command line options, and the code to handle them
@@ -136,11 +139,12 @@ __DATA__
 
 =head1 SYNOPSIS
 
-   genbank2mfasta.pl -in FILENAME -f FEATURE [-out FILENAME] [-help]
+   genbank2mfasta.pl -in FILENAME -f FEATURE [-out FILENAME] [-d TYPE] [-help]
      
       -in FILENAME       Genbank file to be parsed
       -f FEATURE         feature type to be extracted
       [-out FILENAME]    Output file name [default: infile-parsed.fasta]
+      [-d TYPE]          Set if you want a description with the anotation using the identifier specified with TYPE
       [-help]            Displays basic usage information
          
 =cut
