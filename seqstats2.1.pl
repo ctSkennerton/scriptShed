@@ -27,8 +27,6 @@
 use Getopt::Long;
 use Pod::Usage;
 use Bio::SeqIO;
-use Bio::Tools::Seqstats;
-use Data::Dumper;
 #CPAN modules
 
 #locally-written modules
@@ -50,7 +48,7 @@ my %genes;
 my ($total_base, $seq_count, $total_gc, $seq_lt, $cov_lt, $gc_lt, $n_stat) = 0;
 my $len_range = 0;
 my $cov_range = 0;
-my $gc_range = 0;
+my $gc_range = 1;
 my $max;
 my $count = 0;
 generate_parse_params();
@@ -240,10 +238,10 @@ if (exists ($options->{"c"}))
         push(@coverage, $1);
 
         } 
-    else
-    	{
-        pod2usage (-msg=> "\nERROR: input parameter error for -c\n");
-        }
+#    else
+#    	{
+#        pod2usage (-msg=> "\nERROR: input parameter error for -c\n");
+#        }
 	}
 }
 
@@ -281,7 +279,7 @@ foreach my $genename (sort { $genes{$b}->{"length"} <=> $genes{$a}->{"length"} }
         }    	
     else
     	{
-    	print STDERR "Oops... no sequences match your criteria\n"; exit;
+    	print "no sequences match your criteria";
     	}
 	}
 }
@@ -290,7 +288,7 @@ sub sort_gc
 {
 foreach my $genename (sort { $genes{$a}->{"GC"} <=> $genes{$b}->{"GC"} } keys %genes)  
 	{
-        if ($gc_range == 1)
+        if ($gc_range == 2)
     	{
             if (($genes{$genename}->{'GC'} <= $gc[1]) and ($genes{$genename}->{'GC'} >= $gc[0]))
         	{
@@ -323,7 +321,7 @@ foreach my $genename (sort { $genes{$a}->{"GC"} <=> $genes{$b}->{"GC"} } keys %g
         }    	
         else
     	{
-    	print STDERR "Oops... no sequences match your criteria\n"; exit;
+            print "no sequences match your criteria";
     	}
     }
 }
@@ -362,7 +360,7 @@ foreach my $genename (sort { $genes{$b}->{"cov"} <=> $genes{$a}->{"cov"} } keys 
         }    	
     else
     	{
-    	print STDERR "Oops... no sequences match your criteria\n"; exit;
+    	print "no sequences match your criteria";
     	}
 	}
 }
@@ -411,7 +409,7 @@ sub checkParams
 
 sub printAtEnd 
 {
-print STDERR <<"EOF";
+print<<"EOF";
 ---------------------------------------------------------------- 
  $0
  Copyright (C) 2010, 2011 Connor Skennerton
