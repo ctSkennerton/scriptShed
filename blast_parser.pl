@@ -137,7 +137,7 @@ sub checkParams {
 
     # if no arguments supplied print the usage and exit
     #
-    #exec("pod2usage $0") if (0 == (keys (%options) ));
+    exec("pod2usage $0") if (0 == (keys (%options) ));
 
     # If the -help option is set, print the usage and exit
     #

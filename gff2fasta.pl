@@ -1,11 +1,12 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl
  
+use warnings;
 use strict;
 use Bio::SeqIO;
  
 my $verbose = 0;
  
- 
+unless ( defined $ARGV[0]){ die "Usage: $0 <file.gff> <file.fa> \n";}  
  
 ## read in gff
  

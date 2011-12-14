@@ -27,6 +27,7 @@
 use Getopt::Long;
 use Pod::Usage;
 use Bio::SeqIO;
+use Data::Dumper;
 #CPAN modules
 
 #locally-written modules
