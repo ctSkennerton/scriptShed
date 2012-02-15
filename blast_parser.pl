@@ -40,96 +40,67 @@ BEGIN {
 # get input params and print copyright
 
 my $options = checkParams();
+my ($input, $output);
 
-my $out= $options->{'in'}."-blast_parser";
-if(exists ($options->{"out"})) 
-	{ 
-	$out = $options->{"out"}; 
-	}
-my $p = 1; 
-if(exists ($options->{"p"})) 
-	{
-	$p = $options->{"p"}; 
-	}
-my $l = 1; 
-if(exists ($options->{"l"})) 
-	{
-	$l = $options->{"l"}; 
-	}
-my $e = 10; 
-if(exists ($options->{"e"}))
-	{
-	$e = $options->{"e"};
-	}
-my $b = 1; 
-if(exists ($options->{"b"}))
-	{
-	$b = $options->{"b"};
-	}
-my $f = 'blasttable';
-if (exists($options->{"f"}))
-	{
-	$f = $options->{"f"};
-	}
-my $m = 10000000;
-if (exists($options->{"m"}))
-	{
-	$m = $options->{"m"};
-	}
-my $in = new Bio::SearchIO(-format => $f, 
-                           -file   => ($options->{"in"}));
-open(OUT, ">".$out) or die;	
+if(defined $options->{'i'}) {
+    open($input, '<', $options->{'i'}) or die $!;
+} else {
+    $input = \*STDIN;
+}
+if(exists $options->{"o"}) { 
+	  open($output, '>', $options->{"o"}) or die $!; 
+} else {
+    $output = \*STDOUT;
+}
+
+
+
+my $in = new Bio::SearchIO(-format => $options->{'f'} -fh => $input);
 
 while( my $result = $in->next_result ) 
 {
-	while( my $hit = $result->next_hit ) 
+    while( my $hit = $result->next_hit ) 
     {
-		while( my $hsp = $hit->next_hsp ) 
+        while( my $hsp = $hit->next_hsp ) 
         {
-			my $mismatchcount = $hsp->length('total') - 
-			($hsp->num_conserved + $hsp->gaps('total'));
-			if( $hsp->length('total') >= $l) 
-            {
-        		if ( $hsp->percent_identity >= $p) 
-                {
-         			if ( $hsp->significance <= $e) 
-                    {
-         				if ( $hsp->bits >= $b)
-         				{	
-                            if ( $mismatchcount <= $m)
-                            {
-                                print OUT join("\t", ( 	$result->query_name,
-                                $hit->name,
-                                sprintf("%.2f",$hsp->percent_identity),
-                                $hsp->length('total'),
-                                $mismatchcount,
-                                $hsp->gaps('total'),
-                                $hsp->query->strand < 0 ?
-                                ( $hsp->query->end,
-                                $hsp->query->start ) :
-                                ( $hsp->query->start,
-                                $hsp->query->end ),
-                                $hsp->hit->strand < 0 ?
-                                ( $hsp->hit->end,
-                                $hsp->hit->start ) :
-                                ( $hsp->hit->start,
-                                $hsp->hit->end ),
-                                $hsp->evalue,
-                                $hsp->bits)), $hit->description,"\n";
-                            }
-         				}
-                    }
-                } 
+            my $mismatchcount = $hsp->length('total') - ($hsp->num_conserved + $hsp->gaps('total'));
+            if(defined $options->{'l'}) {
+                if( $hsp->length('total') < $options->{'l'}) {
+                next;
+                }
             }
+            if(defined $options->{'p'}) {
+                if ( $hsp->percent_identity < $options->{'p'}) {
+                    next;
+                }
+            }
+            if(defined $options->{'e'}) {
+                if ( $hsp->significance > $options->{'e'}) {
+                    next;
+                }
+            }
+            if(defined $options->{'b'}) {	
+                 if( $hsp->bits < $options->{'b'}) {
+                    next;
+                }
+            }
+            if(defined $options->{'m'}) {
+                if ( $mismatchcount > $options->{'m'}) {
+                    next;
+                }
+            }
+            print $output join("\t", ( 	$result->query_name, $hit->name, sprintf("%.2f",$hsp->percent_identity), $hsp->length('total'),
+            $mismatchcount, $hsp->gaps('total'), 
+            $hsp->query->strand < 0 ?  ( $hsp->query->end, $hsp->query->start ) : ( $hsp->query->start, $hsp->query->end ),
+            $hsp->hit->strand < 0 ?  ( $hsp->hit->end, $hsp->hit->start ) : ( $hsp->hit->start, $hsp->hit->end ),
+            $hsp->evalue, $hsp->bits)), $hit->description,"\n";
         }  
     }
 }
-close OUT;
-printAtStart();
 exit;
 
 sub checkParams {
-    my @standard_options = ( "help+", "in:s", "out:s", "l:s", "p:s", "e:s", "f:s", "b:s", "m:s" );
+    my @standard_options = ( "h+", "i:s", "o:s", "l:s", "p:s", "e:s", "f:s", "b:s", "m:s" );
     my %options;
 
     # Add any other command line options, and the code to handle them
@@ -137,11 +108,11 @@ sub checkParams {
 
     # if no arguments supplied print the usage and exit
     #
-    exec("pod2usage $0") if (0 == (keys (%options) ));
+    #exec("pod2usage $0") if (0 == (keys (%options) ));
 
     # If the -help option is set, print the usage and exit
     #
-    #exec("pod2usage $0") if $options{'help'};
+    exec("pod2usage $0") if $options{'h'};
 	
 	# if there is no input file, print the usage and exit
 	#exec("pod2usage $0") if (! defined ($options->{"in"}));
@@ -172,7 +143,7 @@ __DATA__
 
 =head1 COPYRIGHT
 
-   copyright (C) 2010 Connor Skennerton
+   copyright (C) 2010 2011 Connor Skennerton
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -193,22 +164,17 @@ __DATA__
 
 =head1 SYNOPSIS
 
-   blast_parser.pl -in FILENAME [-out FILENAME] [-help] [-q INTEGER] [-p INTEGER] [-e INTEGER] [-b INTEGER] [-m INTEGER] [-f FORMAT]
+   blast_parser.pl [-i FILENAME] [-o FILENAME] [-h] [-q INTEGER] [-p INTEGER] [-e INTEGER] [-b INTEGER] [-m INTEGER] [-f FORMAT]
    				   
      
-      -in FILENAME                blast file to be parsed
-      [-out FILENAME]           Output file name [default: infile-blast_parsed]
-      [-help]                        Displays basic usage information
-      [-l INTEGER]                the length of the match that the HSP must be higher than or 
-                                        equal to, default is 1
-      [-p INTEGER]              the required percent identity that the HSP must 
-                                       be higher than or equal to, default is 1
-      [-e INTEGER]              the required e-value that the HSP must be lower than or equal to,
-                                       default is 10
-      [-b INTEGER]              the required bits score that the HSP must be higher than or equal to,
-                                       the default is 1  
-      [-f FORMAT]               the file format to be used, default is 'blasttable'		 
-      [-m INTEGER]            the number of mismatches that the HSP must be lower than or
-                                      equal to, the default is 10000000
+      -i FILENAME               Blast file to be parsed [default: STDIN]
+      [-o FILENAME]             Output file name [default: STDOUT]
+      [-h]                      Displays basic usage information
+      [-l INTEGER]              The length of the match that the HSP must be higher than
+      [-p INTEGER]              The required percent identity that the HSP must be higher than
+      [-e INTEGER]              The required e-value that the HSP must be lower than
+      [-b INTEGER]              The required bits score that the HSP must be higher than
+      [-f FORMAT]               The file format to be used, default is 'blasttable'
+      [-m INTEGER]              The number of mismatches that the HSP must be lower than
 =cut
 

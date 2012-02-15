@@ -27,14 +27,14 @@ $lineA = <INFILE>;
 while(defined $lineA) {
     print FILEA $lineA;
     $lineA = <INFILE>;
-    while (defined $lineA && $lineA !~ m/>/) {
+    while (defined $lineA && (substr($lineA, 0,1) != '>')) {
         print FILEA $lineA;
         $lineA = <INFILE>;
     }
 
     print FILEB $lineA;
     $lineA = <INFILE>;
-    while (defined $lineA && $lineA !~ m/>/) {
+    while (defined $lineA && (substr($lineA, 0,1) != '>')) {
         print FILEB $lineA;
         $lineA = <INFILE>;
     }
