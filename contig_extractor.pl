@@ -4,7 +4,7 @@
 #    this script extracts sequences from a multiple fasta file based on the 
 #	 matches obtained from a blast file in m8 format
 #
-#    Copyright (C) 2010, 2011 Connor Skennerton
+#    Copyright (C) 2010, 2011, 2012 Connor Skennerton
 #
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -45,28 +45,31 @@ BEGIN
 my $options = checkParams();
 
 
-my $query = $options->{'i'};
+my $query = \*STDIN;
+if (defined $options->{'i'}) {
+    open($query, $options->{'i'}) or die;
+}
 my $database = $options->{'d'};
-my $outfile = $options->{'o'};
-
-
-open(QUERY, $query) or die;
+my $outfile = \*STDOUT; 
+if (defined $options->{'o'}) {
+    open($outfile, ">", $options->{'o'}) or die;
+}
 
 my %seqs;
-printAtStart();
+#printAtStart();
 
 if($options->{'f'})
 {
     my @aux = undef;
     my ($name, $seq, $qual);
-    while (($name, $seq, $qual) = readfq(\*QUERY, \@aux)) 
+    while (($name, $seq, $qual) = readfq($query, \@aux)) 
     {
         $seqs{$name} = 1;
     }
 }
-else
+elsif (! defined $options->{'c'})
 {
-    while (my $line = <QUERY>) 
+    while (my $line = <$query>) 
     {
         chomp $line;
         if($options->{'l'})
@@ -82,25 +85,29 @@ else
             sam($line);
         }
     }
+} else {
+    my @s = split(/,/, $options->{'c'});
+    foreach my $e (@s) {
+        $seqs{$e} = 1;
+    }
 }
-close QUERY;
+close $query;
 
 my @aux = undef;
 my ($name, $seq, $qual);
 open(DB,$database) or die;
-open(OUT, ">", $options->{'o'}) or die;
 while (($name, $seq, $qual) = readfq(\*DB, \@aux)) 
 {
 	if (exists $seqs{$name})
 	{
      	unless($options->{'v'})
      	{
-           	print_seq(\$name,\$seq,\$qual, \*OUT);
+           	print_seq(\$name,\$seq,\$qual, $outfile);
      	}
 	}
 	elsif ($options->{'v'})
 	{
-           	print_seq(\$name,\$seq,\$qual, \*OUT);
+           	print_seq(\$name,\$seq,\$qual, $outfile);
 	}
 }
 
@@ -181,6 +188,9 @@ sub blast{
 
 sub sam{ 
     my ($line) = shift;
+    # might be faster to use the bitwise operator below
+    # test for the 3rd bit - query unmapped in sam flag field
+    # (var & (1<<3))
     if ($line !~ /\*\t0\t0\t\*\t\*\t0\t0/) 
     {
         my @columns = split(/\t/, $line);
@@ -194,7 +204,7 @@ sub checkParams
     my %options;
 
     # Add any other command line options, and the code to handle them
-    getopts( "i:d:so:lbShvf",\%options );
+    getopts( "i:d:so:c:lbShvf",\%options );
 
     # if no arguments supplied print the usage and exit
     #
@@ -203,14 +213,15 @@ sub checkParams
     # If the -h option is set, print the usage and exit
     #
     pod2usage if ($options{'h'});
-        
-    unless ($options{'S'} || $options{'b'} || $options{'l'} || $options{'f'} )
-    {
-        pod2usage('-msg' => "Please specify one of  -S -b -l -f");
+    unless ($options{'c'}) {
+        unless ($options{'S'} || $options{'b'} || $options{'l'} || $options{'f'} )
+        {
+            pod2usage('-msg' => "Please specify one of  -S -b -l -f");
+        }
     }
-    unless ($options{'i'} && $options{'d'} && $options{'o'})
+    unless (($options{'i'} || $options{'c'}) && $options{'d'})
     {
-        pod2usage('-msg' => "You must specify -i -d -o");
+        pod2usage('-msg' => "You must specify -d and either -i or -c");
     }
     
     if (defined $options{'s'} && !(defined $options{'b'}))
@@ -227,7 +238,7 @@ sub printAtStart {
 print<<"EOF";
 ---------------------------------------------------------------- 
  $0
- Copyright (C) 2010 Connor Skennerton
+ Copyright (C) 2010, 2011, 2012 Connor Skennerton
     
  This program comes with ABSOLUTELY NO WARRANTY;
  This is free software, and you are welcome to redistribute it
@@ -244,7 +255,7 @@ __DATA__
 
 =head1 COPYRIGHT
  
- copyright (C) 2010, 2011 Connor Skennerton
+ copyright (C) 2010, 2011, 2012 Connor Skennerton
  
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -266,20 +277,19 @@ __DATA__
 
 =head1 SYNOPSIS
  
- contig_extractor -i FILE -l|b|S|f -d SEQUENCE_FILE -o FILE [-subject] [-h] [-v] 
+ contig_extractor { [-c CONTIG_NAMES] | [-i FILE] -l|b|S|f } -d SEQUENCE_FILE [-o FILE] [-s] [-h] [-v] 
 
-      [-help]           Displays basic usage information
-      [-sf]             The format of the file containing the contigs,the default is fasta    						
+      [-h]              Displays basic usage information
       -d                Name of the subject file containing the contigs
-      -i                Name of the file containing the matches to the contigs
-      -o                Name of the output file
-      [-h]              Use the hit (second column of blast table) to populate the list [default: use query]
+      [-i]              Name of the file containing the matches to the contigs. Incompatible with -c
+      [-o]              Name of the output file
       [-l]              Use a list of identifiers (one per line) to populate the list
       [-b]              Use a m8 blast file as the input
-      [-subject]        Generate headers based on the subject of a blast file.  default is to use the query
+      [-s]              Generate headers based on the subject of a blast file.  default is to use the query
       [-S]              Use a sam file as the input
       [-f]              Use a fasta/fastq file as the input
       [-v]              Invert the match
+      [-c]              list the names of sequences to extract as a comma separated list. Incompatible with -i
       
 
 
