@@ -188,13 +188,12 @@ sub blast{
 
 sub sam{ 
     my ($line) = shift;
-    # might be faster to use the bitwise operator below
-    # test for the 3rd bit - query unmapped in sam flag field
-    # (var & (1<<3))
-    if ($line !~ /\*\t0\t0\t\*\t\*\t0\t0/) 
+    my @c = split(/\t/,$line);
+    # test whether the third bit is set - query unmapped
+    unless($c[1] & 4)
+    #if ($line !~ /\*\t0\t0\t\*\t\*\t0\t0/) 
     {
-        my @columns = split(/\t/, $line);
-        $seqs{$columns[0]} = 1;
+        $seqs{$c[0]} = 1;
     }
 }
 
