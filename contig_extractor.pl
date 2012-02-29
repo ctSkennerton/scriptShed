@@ -6,6 +6,8 @@
 #
 #    Copyright (C) 2010, 2011, 2012 Connor Skennerton
 #
+#    Support added for the Manotator by Mike Feb 2012
+#
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
 #    the Free Software Foundation, either version 3 of the License, or
@@ -80,9 +82,13 @@ elsif (! defined $options->{'c'})
         {
             blast($line);
         }
-        else
+        elsif ($options->{'S'})
         {
             sam($line);
+        }
+        else #($options->{'U'})
+        {
+            mannotator("UniRef90_".$line);
         }
     }
 } else {
@@ -197,13 +203,18 @@ sub sam{
     }
 }
 
+sub mannotator{
+    my ($line) = shift;
+    my @columns = split /\^/, $line;
+    $seqs{$columns[0]} = 1;
+}
 
 sub checkParams 
 {
     my %options;
 
     # Add any other command line options, and the code to handle them
-    getopts( "i:d:so:c:lbShvf",\%options );
+    getopts( "i:d:so:c:lbShvfU",\%options );
 
     # if no arguments supplied print the usage and exit
     #
@@ -213,9 +224,9 @@ sub checkParams
     #
     pod2usage if ($options{'h'});
     unless ($options{'c'}) {
-        unless ($options{'S'} || $options{'b'} || $options{'l'} || $options{'f'} )
+        unless ($options{'S'} || $options{'U'} || $options{'b'} || $options{'l'} || $options{'f'} )
         {
-            pod2usage('-msg' => "Please specify one of  -S -b -l -f");
+            pod2usage('-msg' => "Please specify one of  -S -b -l -f -U");
         }
     }
     unless (($options{'i'} || $options{'c'}) && $options{'d'})
@@ -253,30 +264,30 @@ __DATA__
  contig_extractor
 
 =head1 COPYRIGHT
- 
+
  copyright (C) 2010, 2011, 2012 Connor Skennerton
- 
+
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
  the Free Software Foundation, either version 3 of the License, or
  (at your option) any later version.
- 
+
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  GNU General Public License for more details.
- 
+
  You should have received a copy of the GNU General Public License
  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 =head1 DESCRIPTION
-   
-   used for extracting whole contigs from a multiple fasta file that contain 
-   significant matches to reads/sequences/contigs from an m8 or m9 blast output file
+
+   Used for extracting whole contigs / sequences from a multiple fasta file that contain 
+   significant matches to reads/sequences/contigs from a variety of list formats
 
 =head1 SYNOPSIS
- 
- contig_extractor { [-c CONTIG_NAMES] | [-i FILE] -l|b|S|f } -d SEQUENCE_FILE [-o FILE] [-s] [-h] [-v] 
+
+ contig_extractor { [-c CONTIG_NAMES] | [-i FILE] -l|b|S|f|U } -d SEQUENCE_FILE [-o FILE] [-s] [-h] [-v] 
 
       [-h]              Displays basic usage information
       -d                Name of the subject file containing the contigs
@@ -289,7 +300,7 @@ __DATA__
       [-f]              Use a fasta/fastq file as the input
       [-v]              Invert the match
       [-c]              list the names of sequences to extract as a comma separated list. Incompatible with -i
-      
+      [-U]              Input file is a mannotator annotation mappings file (default is the uniref file)
 
 
 =cut
