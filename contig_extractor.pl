@@ -74,21 +74,20 @@ elsif (! defined $options->{'c'})
     while (my $line = <$query>) 
     {
         chomp $line;
-        if($options->{'l'})
-        {
+        if($options->{'l'}) {
             list($line);
-        }
-        elsif ($options->{'b'})
-        {
+        } elsif ($options->{'b'}) {
             blast($line);
-        }
-        elsif ($options->{'S'})
-        {
+        } elsif ($options->{'S'}) {
+            # skip header lines
+            next if $line =~ /^@/;
             sam($line);
-        }
-        else #($options->{'U'})
-        {
+        } elsif ($options->{'U'}) {
             mannotator("UniRef90_".$line);
+        } else {
+            next if ($line =~ /^\#/);
+            last if ($line =~ /\#+FASTA/i);
+            gff($line);
         }
     }
 } else {
@@ -192,17 +191,26 @@ sub blast{
 	}
 }
 
-sub sam{ 
+sub sam{
     my ($line) = shift;
     my @c = split(/\t/,$line);
     # test whether the third bit is set - query unmapped
     unless($c[1] & 4)
-    #if ($line !~ /\*\t0\t0\t\*\t\*\t0\t0/) 
     {
-        $seqs{$c[0]} = 1;
+        # test whether the read is paired
+        if (($c[1] & 1 ) && ($c[1] & 128)) {
+            # test whether the read is the second pair
+            $seqs{$c[0]."/2"} = 1;
+        } else {
+            $seqs{$c[0]."/1"} = 1;
+        }
     }
 }
-
+sub gff {
+    my ($line) = shift;
+    my @c = split(/\t/, $line);
+    $seqs{$c[0]} = 1;
+}
 sub mannotator{
     my ($line) = shift;
     my @columns = split /\^/, $line;
@@ -214,7 +222,7 @@ sub checkParams
     my %options;
 
     # Add any other command line options, and the code to handle them
-    getopts( "i:d:so:c:lbShvfU",\%options );
+    getopts( "i:d:so:c:lbShvfUg",\%options );
 
     # if no arguments supplied print the usage and exit
     #
@@ -224,14 +232,13 @@ sub checkParams
     #
     pod2usage if ($options{'h'});
     unless ($options{'c'}) {
-        unless ($options{'S'} || $options{'U'} || $options{'b'} || $options{'l'} || $options{'f'} )
+        unless ($options{'S'} || $options{'g'} || $options{'U'} || $options{'b'} || $options{'l'} || $options{'f'} )
         {
-            pod2usage('-msg' => "Please specify one of  -S -b -l -f -U");
+            pod2usage('-msg' => "Please specify one of  -g -S -b -l -f -U");
         }
     }
-    unless (($options{'i'} || $options{'c'}) && $options{'d'})
-    {
-        pod2usage('-msg' => "You must specify -d and either -i or -c");
+    unless ($options{'d'}) {
+        pod2usage('-msg' => "You must specify -d");
     }
     
     if (defined $options{'s'} && !(defined $options{'b'}))
@@ -287,7 +294,7 @@ __DATA__
 
 =head1 SYNOPSIS
 
- contig_extractor { [-c CONTIG_NAMES] | [-i FILE] -l|b|S|f|U } -d SEQUENCE_FILE [-o FILE] [-s] [-h] [-v] 
+ contig_extractor { [-c CONTIG_NAMES] | [-i FILE] -l|b|S|f|U|g } -d SEQUENCE_FILE [-o FILE] [-s] [-h] [-v] 
 
       [-h]              Displays basic usage information
       -d                Name of the subject file containing the contigs
@@ -301,7 +308,7 @@ __DATA__
       [-v]              Invert the match
       [-c]              list the names of sequences to extract as a comma separated list. Incompatible with -i
       [-U]              Input file is a mannotator annotation mappings file (default is the uniref file)
-
+      [-g]              Input file is gff3 formatted
 
 =cut
 
