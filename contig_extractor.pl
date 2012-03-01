@@ -60,17 +60,13 @@ if (defined $options->{'o'}) {
 my %seqs;
 #printAtStart();
 
-if($options->{'f'})
-{
+if($options->{'f'}) {
     my @aux = undef;
     my ($name, $seq, $qual);
-    while (($name, $seq, $qual) = readfq($query, \@aux)) 
-    {
+    while (($name, $seq, $qual) = readfq($query, \@aux)) {
         $seqs{$name} = 1;
     }
-}
-elsif (! defined $options->{'c'})
-{
+} elsif (! defined $options->{'c'}) {
     while (my $line = <$query>) 
     {
         chomp $line;
