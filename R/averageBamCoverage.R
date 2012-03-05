@@ -19,5 +19,5 @@
 averageBamCoverage <- function(seqname, bamFile, ...) {
   	param <- ScanBamParam(what = c("pos", "qwidth"), which = GRanges(seqname, IRanges(1, 1e+07)), flag = scanBamFlag(isUnmappedQuery = FALSE))
  	x <- scanBam(bamFile, ..., param = param)[[1]]
- 	coverage(IRanges(x[["pos"]], width = x[["qwidth"]]))
+ 	mean(coverage(IRanges(x[["pos"]], width = x[["qwidth"]])))
 }

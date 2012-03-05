@@ -28,10 +28,10 @@ use strict;
 use warnings;
 
 #core Perl modules
-use Getopt::Std;
+#use Getopt::Std;
 use Pod::Usage;
 #CPAN modules
-
+use Getopt::Euclid;
 #locally-written modules
 
 BEGIN 
@@ -44,41 +44,40 @@ BEGIN
 
 # get input params and print copyright
 
-my $options = checkParams();
+#my $options = checkParams();
 
 
 my $query = \*STDIN;
-if (defined $options->{'i'}) {
-    open($query, $options->{'i'}) or die;
+if (defined $ARGV{'-i'}) {
+    open($query, $ARGV{'-i'}) or die;
 }
-my $database = $options->{'d'};
 my $outfile = \*STDOUT; 
-if (defined $options->{'o'}) {
-    open($outfile, ">", $options->{'o'}) or die;
+if (defined $ARGV{'-o'}) {
+    open($outfile, ">", $ARGV{'-o'}) or die;
 }
 
 my %seqs;
 #printAtStart();
 
-if($options->{'f'}) {
+if($ARGV{'-f'}) {
     my @aux = undef;
     my ($name, $seq, $qual);
     while (($name, $seq, $qual) = readfq($query, \@aux)) {
         $seqs{$name} = 1;
     }
-} elsif (! defined $options->{'c'}) {
+} elsif (! defined $ARGV{'-n'}) {
     while (my $line = <$query>) 
     {
         chomp $line;
-        if($options->{'l'}) {
+        if($ARGV{'-l'}) {
             list($line);
-        } elsif ($options->{'b'}) {
+        } elsif ($ARGV{'-b'}) {
             blast($line);
-        } elsif ($options->{'S'}) {
+        } elsif ($ARGV{'-s'}) {
             # skip header lines
             next if $line =~ /^@/;
             sam($line);
-        } elsif ($options->{'U'}) {
+        } elsif ($ARGV{'-m'}) {
             mannotator("UniRef90_".$line);
         } else {
             next if ($line =~ /^\#/);
@@ -87,8 +86,7 @@ if($options->{'f'}) {
         }
     }
 } else {
-    my @s = split(/,/, $options->{'c'});
-    foreach my $e (@s) {
+    foreach my $e (@{$ARGV{'-n'}}) {
         $seqs{$e} = 1;
     }
 }
@@ -96,22 +94,24 @@ close $query;
 
 my @aux = undef;
 my ($name, $seq, $qual);
-open(DB,$database) or die;
-while (($name, $seq, $qual) = readfq(\*DB, \@aux)) 
-{
-	if (exists $seqs{$name})
-	{
-     	unless($options->{'v'})
-     	{
-           	print_seq(\$name,\$seq,\$qual, $outfile);
-     	}
-	}
-	elsif ($options->{'v'})
-	{
-           	print_seq(\$name,\$seq,\$qual, $outfile);
-	}
+foreach my $database (@{$ARGV{'-d'}}) {
+    open(DB,'<',$database) or die $!;
+    while (($name, $seq, $qual) = readfq(\*DB, \@aux)) 
+    {
+        if (exists $seqs{$name})
+        {
+            unless($ARGV{'-v'})
+            {
+                print_seq(\$name,\$seq,\$qual, $outfile);
+            }
+        }
+        elsif ($ARGV{'-v'})
+        {
+                print_seq(\$name,\$seq,\$qual, $outfile);
+        }
+    }
+    close DB;
 }
-
 
 sub print_seq{
     my ($name_ref, $seq_ref, $qual_ref, $fh) = @_;
@@ -177,7 +177,7 @@ sub list{
 sub blast{
   my ($line) = shift;
   my @columns = split(/\t/, $line);
-  	if (exists $options->{'s'})
+  	if (exists $ARGV{'-S'})
 	{
 		$seqs{$columns[1]} = $columns[0];
 	}
@@ -213,54 +213,54 @@ sub mannotator{
     $seqs{$columns[0]} = 1;
 }
 
-sub checkParams 
-{
-    my %options;
+#sub checkParams 
+#{
+#    my %options;
+#
+#    # Add any other command line options, and the code to handle them
+#    getopts( "i:d:so:c:lbShvfUg",\%options );
+#
+#    # if no arguments supplied print the usage and exit
+#    #
+#   pod2usage if (0 == (keys (%options) ));
+#
+#    # If the -h option is set, print the usage and exit
+#    #
+#    pod2usage if ($options{'h'});
+#    unless ($options{'c'}) {
+#        unless ($options{'S'} || $options{'g'} || $options{'U'} || $options{'b'} || $options{'l'} || $options{'f'} )
+#        {
+#            pod2usage('-msg' => "Please specify one of  -g -S -b -l -f -U");
+#        }
+#    }
+#    unless ($options{'d'}) {
+#        pod2usage('-msg' => "You must specify -d");
+#    }
+#    
+#    if (defined $options{'s'} && !(defined $options{'b'}))
+#    {
+#        pod2usage('-msg' => "The subject flag can only be specified with the blast flag\n");
+#    }
+#
+#    
+#    return \%options;
+#}
 
-    # Add any other command line options, and the code to handle them
-    getopts( "i:d:so:c:lbShvfUg",\%options );
 
-    # if no arguments supplied print the usage and exit
-    #
-   pod2usage if (0 == (keys (%options) ));
+#sub printAtStart {
+#print<<"EOF";
+#---------------------------------------------------------------- 
+# $0
+# Copyright (C) 2010, 2011, 2012 Connor Skennerton
+#    
+# This program comes with ABSOLUTELY NO WARRANTY;
+# This is free software, and you are welcome to redistribute it
+# under certain conditions: See the source for more details.
+#---------------------------------------------------------------- 
+#EOF
+#}
 
-    # If the -h option is set, print the usage and exit
-    #
-    pod2usage if ($options{'h'});
-    unless ($options{'c'}) {
-        unless ($options{'S'} || $options{'g'} || $options{'U'} || $options{'b'} || $options{'l'} || $options{'f'} )
-        {
-            pod2usage('-msg' => "Please specify one of  -g -S -b -l -f -U");
-        }
-    }
-    unless ($options{'d'}) {
-        pod2usage('-msg' => "You must specify -d");
-    }
-    
-    if (defined $options{'s'} && !(defined $options{'b'}))
-    {
-        pod2usage('-msg' => "The subject flag can only be specified with the blast flag\n");
-    }
-
-    
-    return \%options;
-}
-
-
-sub printAtStart {
-print<<"EOF";
----------------------------------------------------------------- 
- $0
- Copyright (C) 2010, 2011, 2012 Connor Skennerton
-    
- This program comes with ABSOLUTELY NO WARRANTY;
- This is free software, and you are welcome to redistribute it
- under certain conditions: See the source for more details.
----------------------------------------------------------------- 
-EOF
-}
-
-__DATA__
+__END__
 
 =head1 NAME
 	
@@ -283,28 +283,91 @@ __DATA__
  You should have received a copy of the GNU General Public License
  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+
+=head1 REQUIRED ARGUMENTS
+
+=over
+
+=item -d <file>
+
+file of reads where a subset needs to be extracted.  Option can be specified multiple times.
+
+=for Euclid:
+    repeatable
+    file.type: readable
+
+=back
+
+=head1 OPTIONS
+
+=over
+
+=item -i <input_file>
+
+File containing sequences or identifiers to be extracted from the sequence database
+
+=for Euclid:
+    input_file.type: readable
+    input_file.excludes: name
+    input_file.excludes.error: You cannot specify both names on the command line and give an input file
+
+=item -o <output_file>
+
+Output file name
+
+=for Euclid
+    output_file.type: writable
+
+=item -l <list>
+
+Input file is a list of identifiers, one per line
+
+=item -b <blast>
+
+Input file is in tabular blast format
+
+=item -s <sam>
+
+Input is in Sam format
+
+=item -f <fastx>
+
+Input is in fasta or fastq format
+
+=item -g <gff>
+
+Input is in gff3 format
+
+=item -m <mannotator>
+
+Input is a mannotator formated annotations file
+
+=item -S <subject>
+
+Used only when the input is in blast format; sets the subject as the list of identifiers. Default: query
+
+=item -n <name>...
+
+A list of sequence names to extract in the form of a space separated list
+
+=for Euclid
+    name.excludes: blast, sam, fastx, gff, mannotator, subject
+    name.excludes.error: When specifying names on the command line the input type can only be set to list
+
+=item -v
+
+Invert the match. ie extract non-matching reads
+
+=back
+
+=head1 VERSION
+
+ 0.5
+
 =head1 DESCRIPTION
 
    Used for extracting whole contigs / sequences from a multiple fasta file that contain 
    significant matches to reads/sequences/contigs from a variety of list formats
-
-=head1 SYNOPSIS
-
- contig_extractor { [-c CONTIG_NAMES] | [-i FILE] -l|b|S|f|U|g } -d SEQUENCE_FILE [-o FILE] [-s] [-h] [-v] 
-
-      [-h]              Displays basic usage information
-      -d                Name of the subject file containing the contigs
-      [-i]              Name of the file containing the matches to the contigs. Incompatible with -c
-      [-o]              Name of the output file
-      [-l]              Use a list of identifiers (one per line) to populate the list
-      [-b]              Use a m8 blast file as the input
-      [-s]              Generate headers based on the subject of a blast file.  default is to use the query
-      [-S]              Use a sam file as the input
-      [-f]              Use a fasta/fastq file as the input
-      [-v]              Invert the match
-      [-c]              list the names of sequences to extract as a comma separated list. Incompatible with -i
-      [-U]              Input file is a mannotator annotation mappings file (default is the uniref file)
-      [-g]              Input file is gff3 formatted
 
 =cut
 

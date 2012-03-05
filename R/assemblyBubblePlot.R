@@ -6,7 +6,9 @@ option_list <- list(
 		make_option(c("-f", "--fasta"), default="NULL", type="character", 
 					help="File name for the fasta file"),
 		make_option(c("-o", "--output"), default="NULL", type="character", 
-					help="Output file name for the image")
+					help="Output file name for the image"),
+		make_option(c("-p", "--legendPos"), default="bottomright", type="character", 
+					help="position of the legend. choose from: bottomleft, bottomright (default), topleft, topright")			
 )
 options <- parse_args(OptionParser(option_list = option_list), args = commandArgs(trailingOnly=TRUE))
 
@@ -22,24 +24,24 @@ if(options$output == "NULL") {
 	print_help(OptionParser(option_list = option_list))
 	q()
 }
+
 suppressPackageStartupMessages(library(seqinr))
 suppressPackageStartupMessages(library(Rsamtools))
-library(plyr)
-source("~/scripts/R/averageBamCoverage.R")
-source("~/scripts/R/seqStats.R")
+suppressPackageStartupMessages(library(PBSmapping))
+source("~/scripts/scriptShed/R/averageBamCoverage.R")
+source("~/scripts/scriptShed/R/seqStats.R")
 f<- read.fasta(options$fasta)
 
-data <- lapply(f, seqStats)
-data_as_frame <- ldply(data)
+data <- vapply(f,seqStats, c(name="",length=0,gc=0.0))
+data <- t(data)
+coverage <- sapply(data[,1],averageBamCoverage, options$bam)
 
-cvg <- lapply(data_as_frame$name,averageBamCoverage, options$bam)
-names(cvg) <- data$name
-cvg2 <- lapply(cvg, mean)
+data = cbind(data, coverage)
+data <- apply(data,1:2,as.numeric)
 
-
-data2_as_frame <- data.frame(coverage=unlist(cvg2), name=data_as_frame$name)
-
-c <- merge(data_as_frame, data2_as_frame,x.by="name", y.by="name")
 svg(options$output)
-symbols(c$coverage, c$gc, circles=c$length,fg="white",bg="red",inches=0.7,ylab="GC",xlab="coverage")
+
+plot(c(min(data[,4]),max(data[,4])), c(min(data[,3]),max(data[,3])),col="white", xlab="coverage",ylab="gc")
+addBubbles(data[,4],data[,3],data[,2], legend.title="Length", legend.pos=options$legendPos, symbol.bg=rgb(.9,.5,0,.6))
+#symbols(data$coverage, data$gc, circles=data$length, fg="white", bg="red", inches=0.7, ylab="GC", xlab="coverage")
 dev.off()
