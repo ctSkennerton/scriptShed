@@ -56,20 +56,32 @@ for my $feat_object ($seq_object->get_SeqFeatures)
 {
     if ($feat_object->primary_tag eq "$target_feature") 
     {
-        print OUT_FILE ">", $target_feature, "/",$feat_object->start, "-", $feat_object->end;
-        if(defined $options->{'d'})
-        {
+        my ($orf_name,$start,$end,$desc) = undef;
           for my $tag ($feat_object->get_all_tags) 
           {
-              if( $tag =~ /$options->{'d'}/)
+              if($tag eq $options->{'p'}) {
+                  for my $value ($feat_object->get_tag_values($tag))
+                  {
+                    $orf_name = $value;
+                  }
+              } 
+            elsif(defined $options->{'d'})
+            {
+              if( $tag eq $options->{'d'})
               {
                   for my $value ($feat_object->get_tag_values($tag))
                   {
-                      print OUT_FILE "\t'$value'";
-                      last;
+                      $desc .= "$value ";
                   }
                }
           }
+      }
+      if(!defined $orf_name) {
+          $orf_name = $target_feature;
+      }
+      print OUT_FILE ">", $orf_name, "/",$feat_object->start, "-", $feat_object->end;
+      if(defined $desc) {
+          print OUT_FILE " $desc";
       }
       print OUT_FILE "\n", $feat_object->spliced_seq->seq,"\n";
     }
@@ -79,7 +91,7 @@ for my $feat_object ($seq_object->get_SeqFeatures)
 close OUT_FILE;
 
 sub checkParams {
-    my @standard_options = ( "help+", "in:s", "out:s", "f:s","d:s" );
+    my @standard_options = ( "help+", "in:s", "out:s", "f:s","d:s","p:s");
     my %options;
 
     # Add any other command line options, and the code to handle them
@@ -139,12 +151,13 @@ __DATA__
 
 =head1 SYNOPSIS
 
-   genbank2mfasta.pl -in FILENAME -f FEATURE [-out FILENAME] [-d TYPE] [-help]
+   genbank2mfasta.pl -in FILENAME -f FEATURE [-out FILENAME] [-d TYPE] [-p TYPE] [-help]
      
       -in FILENAME       Genbank file to be parsed
       -f FEATURE         feature type to be extracted
       [-out FILENAME]    Output file name [default: infile-parsed.fasta]
-      [-d TYPE]          Set if you want a description with the anotation using the identifier specified with TYPE
+      [-d TYPE]          Set if you want a description with the anotation using the identifier specified with TYPE eg. note, product
+      [-p TYPE]          Set the name of the sequence to the tag value of TYPE eg. gene, locus_tag
       [-help]            Displays basic usage information
          
 =cut

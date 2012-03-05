@@ -45,18 +45,18 @@ BEGIN {
 my $global_options = checkParams();
 
 my $in_fh = \*STDIN;
-if(!defined $global_options->{'in'}) {
+if(defined $global_options->{'in'}) {
     open $in_fh, '<', $global_options->{'in'} or die $!;
 }
 
 my $pair_fh = \*STDOUT;
-if(!defined $global_options->{'paired'}) {
-    open $in_fh, '>', $global_options->{'paired'} or die $!;
+if(defined $global_options->{'paired'}) {
+    open $pair_fh, '>', $global_options->{'paired'} or die $!;
 }
 
 my $single_fh = \*STDERR;
-if(!defined $global_options->{'single'}) {
-    open $in_fh, '>', $global_options->{'single'} or die $!;
+if(defined $global_options->{'single'}) {
+    open $single_fh, '>', $global_options->{'single'} or die $!;
 }
 
 my @aux = undef;
@@ -67,25 +67,27 @@ while (($name, $seq, $qual) = readfq($in_fh, \@aux)) {
         push @{$pairs_hash{$1}}, [$name, $seq, $qual, $2];
     }
 }
+close $in_fh;
 while(my($k,$v) = each %pairs_hash) {
     if(scalar @{$v} > 1) {
         foreach my $e (sort {$a->[3] <=> $b->[3]} @{$v}) {
             if(defined $e->[2]){
-                print $pair_fh "\@$e->[0]\n$e->[1]\n\+$e->[0]\n$e->[3]\n";
+                print $pair_fh "\@$e->[0]\n$e->[1]\n\+$e->[0]\n$e->[2]\n";
             } else {
                 print $pair_fh ">$e->[0]\n$e->[1]\n";
             }
         }
     } else {
         if(defined $v->[0]->[2]){
-            print $single_fh "\@$v->[0]->[0]\n$v->[0]->[1]\n\+$v->[0]->[0]\n$v->[0]->[3]\n";
+            print $single_fh "\@$v->[0]->[0]\n$v->[0]->[1]\n\+$v->[0]->[0]\n$v->[0]->[2]\n";
         } else {
             print $single_fh ">$v->[0]->[0]\n$v->[0]->[1]\n";
         }
     }
 
 }
-
+close $single_fh;
+close $pair_fh;
 sub readfq {
 	my ($fh, $aux) = @_;
 	@$aux = [undef, 0] if (!defined(@$aux));
@@ -133,7 +135,7 @@ sub checkParams {
     #-----
     # Do any and all options checking here...
     #
-    my @standard_options = ( "help|h+" );
+    my @standard_options = ( "help|h+", "paired|p:s","in|i:s", "single|s:s" );
     my %options;
 
     # Add any other command line options, and the code to handle them
