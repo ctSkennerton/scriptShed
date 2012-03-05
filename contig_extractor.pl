@@ -318,41 +318,37 @@ Output file name
 =for Euclid
     output_file.type: writable
 
-=item -l <list>
+=item -l
 
 Input file is a list of identifiers, one per line
 
-=item -b <blast>
+=item -b
 
 Input file is in tabular blast format
 
-=item -s <sam>
+=item -s
 
 Input is in Sam format
 
-=item -f <fastx>
+=item -f
 
 Input is in fasta or fastq format
 
-=item -g <gff>
+=item -g
 
 Input is in gff3 format
 
-=item -m <mannotator>
+=item -m
 
 Input is a mannotator formated annotations file
 
-=item -S <subject>
+=item -S
 
 Used only when the input is in blast format; sets the subject as the list of identifiers. Default: query
 
 =item -n <name>...
 
 A list of sequence names to extract in the form of a space separated list
-
-=for Euclid
-    name.excludes: blast, sam, fastx, gff, mannotator, subject
-    name.excludes.error: When specifying names on the command line the input type can only be set to list
 
 =item -v
 
@@ -362,7 +358,7 @@ Invert the match. ie extract non-matching reads
 
 =head1 VERSION
 
- 0.5
+ 0.5.1
 
 =head1 DESCRIPTION
 
