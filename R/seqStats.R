@@ -1,3 +1,3 @@
 seqStats <- function(fastaObj){
-	return(data.frame(name=attr(fastaObj,"name"),length=length(fastaObj),gc=GC(fastaObj)))
+	return(c(attr(fastaObj,"name"),length(fastaObj),GC(fastaObj)))
 }
