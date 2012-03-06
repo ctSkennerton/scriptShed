@@ -290,7 +290,7 @@ __END__
 
 =item -d <file>
 
-file of reads where a subset needs to be extracted.  Option can be specified multiple times.
+file of reads where a subset needs to be extracted (can be FASTA or FASTQ, automatically detected).  Option can be specified multiple times.
 
 =for Euclid:
     repeatable
