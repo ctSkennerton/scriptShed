@@ -232,6 +232,12 @@ class LinkFinder:
             if buf is not None:
                 connectFile.write(buf)
 
+def getSubList(subFile):
+    f = open(subFile, 'r')
+    subList = []
+    for line in f:
+        subList.append(line.rstrip())
+    return subList
 
 if __name__ =='__main__':
     
@@ -243,6 +249,9 @@ if __name__ =='__main__':
     parser.add_option("-e","--end-length", type="int", dest="endOnly", help="Only consider links in the first or last x num of bases of a contig")
     parser.add_option("-t", "--cytoscape", action="store_true", dest="cytoscape", help="Output connections in cytoscape formatted tables. Default: false")
     parser.add_option("-p","--prefix", type="string", dest="prefix", default="connections.", help="Prefix for output files default: connections.")
+    parser.add_option("-s","--subset", type="string",dest="subFile",help="file \
+            containing a list of contig headers.  Only those contigs listed \
+            will be evaluated for connections")
     # get and check options
     (opts, args) = parser.parse_args()
     if(opts.inFile is None):
@@ -254,10 +263,19 @@ if __name__ =='__main__':
             bamFile = pysam.Samfile(opts.inFile, 'rb')
         except:
             print"The input file must be in bam format"
+
     cluster_size = 300
     min_links = 3
+    doSubset = False
+    doEndOnly = False
+
+    if opts.subFile is not None:
+        subList = getSubList(opts.subFile)
+        doSubset = True
+
     if (opts.clusterWidth is not None):
         cluster_size = opts.clusterWidth
+
     if (opts.numOfLinks is not None):
         min_links = opts.numOfLinks
 
@@ -265,6 +283,7 @@ if __name__ =='__main__':
         finder = LinkFinder(bamFile, cluster_size, min_links, 0, opts.prefix)
         finder.findAllPossibleLinks()
     else:
+        doEndOnly = True
         finder = LinkFinder(bamFile, cluster_size, min_links, opts.endOnly, opts.prefix)
         finder.findEndLinks()
 
