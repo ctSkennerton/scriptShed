@@ -62,7 +62,7 @@ my %seqs;
 if($ARGV{'-f'}) {
     my @aux = undef;
     my ($name, $seq, $qual);
-    while (($name, $seq, $qual) = readfq($query, \@aux)) {
+    while (($name, $seq, $qual) = &readfq($query, \@aux)) {
         $seqs{$name} = 1;
     }
 } elsif (! defined $ARGV{'-n'}) {
@@ -70,19 +70,19 @@ if($ARGV{'-f'}) {
     {
         chomp $line;
         if($ARGV{'-l'}) {
-            list($line);
+            &list($line);
         } elsif ($ARGV{'-b'}) {
-            blast($line);
+            &blast($line);
         } elsif ($ARGV{'-s'}) {
             # skip header lines
             next if $line =~ /^@/;
-            sam($line);
+            &sam($line);
         } elsif ($ARGV{'-m'}) {
-            mannotator("UniRef90_".$line);
+            &mannotator("UniRef90_".$line);
         } else {
             next if ($line =~ /^\#/);
             last if ($line =~ /\#+FASTA/i);
-            gff($line);
+            &gff($line);
         }
     }
 } else {
