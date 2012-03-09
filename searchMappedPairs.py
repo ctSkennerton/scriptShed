@@ -126,13 +126,15 @@ class ContigLinks:
             
 class LinkFinder:
     def __init__(self, bamFile, clusterSize, mniNumLinks, endSize,
-            outputPrefix):
+            outputPrefix, doSubset, subList):
         self.bamFile = bamFile
         self.clusterSize = clusterSize
         self.minNumLinks = mniNumLinks
         self.endLength = endSize
         self.hashOfLinks = {}
         self.outputPrefix = outputPrefix
+        self.doSubset = doSubset
+        self.subList = subList
     
     def linkList(self):
         return self.hashOfLinks
@@ -157,24 +159,40 @@ class LinkFinder:
             s = ContigLinks( link)
             self.hashOfLinks[key] = s
 
-    def findAllPossibleLinks(self):
-        references = self.bamFile.references
-        for contig in references:
-            for read in self.bamFile.fetch(contig):
-                if self.hasMissingMates(read, contig):
-                    self.addOrAppend(self.bamFile.getrname(read.mrnm), contig, read )
+    def iterateThroughContigs(self):
+        for contig,length in zip(self.bamFile.references,
+                self.bamFile.lengths):
+            if self.doSubset is True:
+                self.findInSubset(contig, length)
+            elif self.endLength> 0:
+                print "checking contig "+contig
+                self.findEndLinks(contig, length)
+            else:
+                print "checking contig "+contig
+                self.findAllPossibleLinks(contig, length)
 
-    def findEndLinks(self):
+    def findInSubset(self, contig, length):
+        if contig in self.subList:
+            print "checking contig "+contig
+            if self.endLength > 0:
+                self.findEndLinks(contig, length)
+            else:
+                self.findAllPossibleLinks(contig, length)
 
-        for contig,length in zip(self.bamFile.references, self.bamFile.lengths):
+    def findAllPossibleLinks(self, contig, length):
+        for read in self.bamFile.fetch(contig):
+            self.checkLink(read, length, contig)
+            #if self.hasMissingMates(read, contig):
+            #    self.addOrAppend(self.bamFile.getrname(read.mrnm), contig, read )
 
-            # get the links at the start of the reference
-            for read in self.bamFile.fetch(contig, 1, self.endLength):
-                self.checkLink(read, length, contig)
+    def findEndLinks(self, contig, length):
+        # get the links at the start of the reference
+        for read in self.bamFile.fetch(contig, 1, self.endLength):
+            self.checkLink(read, length, contig)
 
-            # now get oll of the links at the end of the reference
-            for read in self.bamFile.fetch(contig, length - self.endLength, length):
-                self.checkLink(read, length, contig)
+        # now get oll of the links at the end of the reference
+        for read in self.bamFile.fetch(contig, length - self.endLength, length):
+            self.checkLink(read, length, contig)
 
     def checkLink(self, read, length, contig):
         if self.isMated(read):
@@ -246,7 +264,8 @@ if __name__ =='__main__':
     parser.add_option("-i","--input",type="string",dest="inFile",help="the name of the input bam file")
     parser.add_option("-c","--clusterWidth", type="int", dest="clusterWidth", help="the maximum number of positions that two links can be apart to be considered part of the same cluster [default: 300]")
     parser.add_option("-n","--numberLinks", type="int", dest="numOfLinks", help="the number of links that two contigs must share for the links to even be considered 'real' [default: 3]")
-    parser.add_option("-e","--end-length", type="int", dest="endOnly", help="Only consider links in the first or last x num of bases of a contig")
+    parser.add_option("-e","--end-length", type="int", dest="endOnly",
+            default=0, help="Only consider links in the first or last x num of bases of a contig")
     parser.add_option("-t", "--cytoscape", action="store_true", dest="cytoscape", help="Output connections in cytoscape formatted tables. Default: false")
     parser.add_option("-p","--prefix", type="string", dest="prefix", default="connections.", help="Prefix for output files default: connections.")
     parser.add_option("-s","--subset", type="string",dest="subFile",help="file \
@@ -267,8 +286,7 @@ if __name__ =='__main__':
     cluster_size = 300
     min_links = 3
     doSubset = False
-    doEndOnly = False
-
+    subList = []
     if opts.subFile is not None:
         subList = getSubList(opts.subFile)
         doSubset = True
@@ -279,13 +297,9 @@ if __name__ =='__main__':
     if (opts.numOfLinks is not None):
         min_links = opts.numOfLinks
 
-    if opts.endOnly is None:
-        finder = LinkFinder(bamFile, cluster_size, min_links, 0, opts.prefix)
-        finder.findAllPossibleLinks()
-    else:
-        doEndOnly = True
-        finder = LinkFinder(bamFile, cluster_size, min_links, opts.endOnly, opts.prefix)
-        finder.findEndLinks()
+    finder = LinkFinder(bamFile, cluster_size, min_links, opts.endOnly,
+            opts.prefix, doSubset, subList)
+    finder.iterateThroughContigs()
 
     finder.clusterLinks()
 
