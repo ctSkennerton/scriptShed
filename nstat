@@ -1,0 +1,262 @@
+#!/usr/bin/env perl
+###############################################################################
+#
+#    nstat
+#    
+#    calculate the N-statistic
+#    
+#    Copyright (C) 2012 Connor Skennerton
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+###############################################################################
+
+#pragmas
+use strict;
+use warnings;
+
+#core Perl modules
+use Getopt::Long;
+
+#CPAN modules
+
+#locally-written modules
+
+BEGIN {
+    select(STDERR);
+    $| = 1;
+    select(STDOUT);
+    $| = 1;
+}
+
+# get input params and print copyright
+#printAtStart();
+my $global_options = checkParams();
+
+######################################################################
+# CODE HERE
+######################################################################
+my $in_fh = \*STDIN;# = &overrideDefault;
+if(defined $global_options->{'input'}) {
+    $in_fh = &openRead($global_options->{'input'});
+}
+my $out_fh = \*STDOUT;
+if(defined $global_options->{'output'}) {
+    $out_fh = &openWrite($global_options->{'output'});
+}
+my $wanted_nstat = &overrideDefault(50, "nstat");
+
+my %seq_hash;
+my ($name,$seq,$qual);
+my $total_base = 0;
+my $total_seq = 0;
+my @aux = undef;
+while (($name,$seq,$qual) = &readfq($in_fh,\@aux)) {
+    my $l = length($seq);
+    $seq_hash{$name} = [$seq,$qual,$l];
+    $total_base += $l;
+    $total_seq++;
+}
+close $in_fh;
+my $nstat_length = $total_base / (100 / $wanted_nstat);
+my @sorted = sort {$seq_hash{$b}->[2] <=> $seq_hash{$a}->[2]} keys %seq_hash;
+
+my $cum_length = 0;
+my $n_statistic = 0;
+foreach my $s (@sorted) {
+    last if ($cum_length > $nstat_length);
+    if ($global_options->{'print'}) {
+        &print_seq(\$s, \$seq_hash{$s}->[0], \$seq_hash{$s}->[1], $out_fh);
+    }
+    $cum_length += $seq_hash{$s}->[2];
+    $n_statistic = $seq_hash{$s}->[2];
+}
+
+print STDERR $n_statistic,"\n";
+
+######################################################################
+# CUSTOM SUBS
+######################################################################
+sub readfq {
+	my ($fh, $aux) = @_;
+	@$aux = [undef, 0] if (!defined(@$aux));
+	return if ($aux->[1]);
+	if (!defined($aux->[0])) {
+		while (<$fh>) {
+			chomp;
+			if (substr($_, 0, 1) eq '>' || substr($_, 0, 1) eq '@') {
+				$aux->[0] = $_;
+				last;
+			}
+		}
+		if (!defined($aux->[0])) {
+			$aux->[1] = 1;
+			return;
+		}
+	}
+	my $name = /^.(\S+)/? $1 : '';
+	my $seq = '';
+	my $c;
+	$aux->[0] = undef;
+	while (<$fh>) {
+		chomp;
+		$c = substr($_, 0, 1);
+		last if ($c eq '>' || $c eq '@' || $c eq '+');
+		$seq .= $_;
+	}
+	$aux->[0] = $_;
+	$aux->[1] = 1 if (!defined($aux->[0]));
+	return ($name, $seq) if ($c ne '+');
+	my $qual = '';
+	while (<$fh>) {
+		chomp;
+		$qual .= $_;
+		if (length($qual) >= length($seq)) {
+			$aux->[0] = undef;
+			return ($name, $seq, $qual);
+		}
+	}
+	$aux->[1] = 1;
+	return ($name, $seq);
+}
+
+sub print_seq{
+    my ($name_ref, $seq_ref, $qual_ref, $fh) = @_;
+    if (defined $$qual_ref)
+    {
+        # fastq file
+        print $fh "@".$$name_ref."\n".$$seq_ref."\n+".$$name_ref."\n".$$qual_ref."\n";
+    }
+    else
+    {
+        print $fh ">".$$name_ref."\n".$$seq_ref."\n";
+    }
+}
+
+######################################################################
+# TEMPLATE SUBS
+######################################################################
+sub checkParams {
+    #-----
+    # Do any and all options checking here...
+    #
+    my @standard_options = ( "help|h+", "nstat|n:s","print|p+", "input|i:s", "output|o:s" );
+    my %options;
+
+    # Add any other command line options, and the code to handle them
+    # 
+    GetOptions( \%options, @standard_options );
+
+    # if no arguments supplied print the usage and exit
+    #
+    #exec("pod2usage $0") if (0 == (keys (%options) ));
+
+    # If the -help option is set, print the usage and exit
+    #
+    exec("pod2usage $0") if $options{'help'};
+
+    # Compulsosy items
+    #if(!exists $options{''} ) { print "**ERROR: $0 : \n"; exec("pod2usage $0"); }
+
+    return \%options;
+}
+
+sub printAtStart {
+print<<"EOF";
+---------------------------------------------------------------- 
+ $0
+ Copyright (C) 2012 Connor Skennerton
+    
+ This program comes with ABSOLUTELY NO WARRANTY;
+ This is free software, and you are welcome to redistribute it
+ under certain conditions: See the source for more details.
+---------------------------------------------------------------- 
+EOF
+}
+
+sub openWrite
+{
+    #-----
+    # Open a file for writing
+    #
+    my ($fn) = @_;
+    open my $fh, ">", $fn or die "**ERROR: could not open file: $fn for writing $!\n";
+    return $fh;
+}
+
+sub openRead
+{   
+    #-----
+    # Open a file for reading
+    #
+    my ($fn) = @_;
+    open my $fh, "<", $fn or die "**ERROR: could not open file: $fn for reading $!\n";
+    return $fh;
+}
+
+sub overrideDefault
+{
+    #-----
+    # Set and override default values for parameters
+    #
+    my ($default_value, $option_name) = @_;
+    if(exists $global_options->{$option_name}) 
+    {
+        return $global_options->{$option_name};
+    }
+    return $default_value;
+}
+
+__DATA__
+
+=head1 NAME
+
+    nstat
+
+=head1 COPYRIGHT
+
+   copyright (C) 2012 Connor Skennerton
+
+   This program is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+=head1 DESCRIPTION
+
+    Given a set of sequences in fast[a|q] format, calculates the 
+    N-statistic.  Optionally can also print out sequences above the 
+    selected threshold. Prints the N-statistic to STDERR and the 
+    sequences to STDOUT
+
+=head1 SYNOPSIS
+
+    nstat [-input|i FILE] [-output|o FILE] [-print|p] [-nstat|n INT] [-help|h]
+
+        [-input|i FILE]              Input file of sequences [STDIN]
+        [-output|o FILE]             Output file if printing sequences [STDOUT]
+        [-nstat|n INT]               Desired N-statistic [50]
+        [-print|p]                   Print sequences
+        [-help -h]                   Displays basic usage information
+         
+=cut
+
