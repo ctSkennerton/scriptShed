@@ -111,9 +111,7 @@ class ContigLinks:
             for links in self.links:
                 edge_label = self.generateGraphvizEdgeLabel(links)
                 contig = key.split(':')
-                parts1 = contig[0].split('_')
-                parts2 = contig[1].split('_')
-                label = 'N'+parts1[1]+'_L'+parts1[3]+' -> N'+parts2[1]+'_L'+parts2[3]+ '[len = 3 label = '+edge_label+'];\n'
+                label = contig[0]+' -> '+contig[1]+ '[len = 3 label = '+edge_label+'];\n'
                 return label
 
     def to_cytoscapeConnections(self, key):
