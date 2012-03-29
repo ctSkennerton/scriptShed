@@ -1,0 +1,2 @@
+#!/bin/bash
+samtools view -SubF 4 $1 | samtools sort - ${1%.sam} && samtools index ${1%.sam}".bam"
