@@ -1,0 +1,315 @@
+#!/usr/bin/env ruby 
+
+# == Synopsis 
+#   This is a sample description of the application.
+#   Blah blah blah.
+#
+# == Examples
+#   This command does blah blah blah.
+#     ruby_cl_skeleton foo.txt
+#
+#   Other examples:
+#     ruby_cl_skeleton -q bar.doc
+#     ruby_cl_skeleton --verbose foo.html
+#
+# == Usage 
+#   ruby_cl_skeleton [options] source_file
+#
+#   For help use: ruby_cl_skeleton -h
+#
+# == Options
+#   -h, --help          Displays help message
+#   -v, --version       Display the version, then exit
+#   -q, --quiet         Output as little as possible, overrides verbose
+#   -V, --verbose       Verbose output
+#   TO DO - add additional options
+#
+# == Author
+#   YourName
+#
+# == Copyright
+#   Copyright (c) 2007 YourName. Licensed under the MIT License:
+#   http://www.opensource.org/licenses/mit-license.php
+
+
+# TO DO - replace all ruby_cl_skeleton with your app name
+# TO DO - replace all YourName with your actual name
+# TO DO - update Synopsis, Examples, etc
+# TO DO - change license if necessary
+
+
+
+require 'optparse' 
+require 'date'
+require 'rubygems'
+require 'bio'
+
+
+class App
+  VERSION = 0.1
+  PROGRAM_NAME = "esomTools"
+  
+  attr_reader :options
+
+  def initialize(arguments, stdin)
+    @arguments = arguments
+    @stdin = stdin
+    
+    # Set defaults
+    @options = Hash.new
+    @options[:verbose] = false
+    @options[:quiet] = false
+    # TO DO - add additional defaults
+  end
+
+  # Parse options, check arguments, then process the command
+  def run
+        
+    if parsed_options?
+      
+      process_command
+    end
+      
+  end
+  
+  protected
+  
+    def parsed_options?
+      
+      # Specify options
+      opts = OptionParser.new
+      opts.banner = "Usage: #{PROGRAM_NAME} [options]"
+      opts.on('-V', '--version', "Output version information")    { puts VERSION ; exit 0 }
+      opts.on('-P', '--partition', "Given a particular class list, will segregate all contigs from a class into separate fasta files") {@options[:partition_class] = true }
+      opts.on('-R', '--remove', "Delete all the windows of a class from an lrn file") { @options[:rmcls] = true }
+      opts.on('--remove-class [INT]', "An integer value for the class that needs to be removed" ) {|v| @options[:rm_class] = v}
+      opts.on('-c', '--class-file [FILE]', "name of the class file") {|f| @options[:cls_file] = f}
+      opts.on('-f', '--fasta-file [FILE]', "name of the fasta file") {|f| @options[:fasta_file] = f }
+      opts.on('-n', '--name-file [FILE]', "name of the names file") {|f| @options[:name_file] = f }
+      opts.on('-l', '--lrn-file [FILE]', "name of the lrn file") {|f| @options[:lrn_file] = f}
+      opts.on('-v', '--inverse', "inverse the previous operations") { @options[:inverse] = true }
+      opts.parse!(@arguments) rescue return false
+      
+      process_options
+      unless arguments_valid?
+        opts.help
+      end
+      true      
+    end
+
+    # Performs post-parse processing on options
+    def process_options
+      if @options.has_key?(:rm_class)
+          @options[:rmcls] = true
+      end
+    end
+    
+    def output_options
+      puts "Options:\
+"
+      
+      @options.marshal_dump.each do |name, val|        
+        puts "  #{name} = #{val}"
+      end
+    end
+
+    # True if required arguments were provided
+    def arguments_valid?
+      return false if (@options[:partition_class] and @options[:rmcls])
+
+      if @options[:rmcls]
+        return false unless (@options[:cls_file] and @options[:lrn_file])
+      elsif @options[:partition_class]
+        return false unless (@options[:cls_file] and @options[:name_file] and @options[:fasta_file])
+      end
+      true
+    end
+    
+    def process_command
+      if @options[:partition_class]
+        p = Parition.new(@options[:cls_file], @options[:name_file], @options[:fasta_file])
+        p.read_cls
+        p.read_names
+        p.partition_all_classes
+      elsif @options[:rmcls]
+        r = RemoveCls.new(@options[:cls_file], @options[:lrn_file])
+        r.add_class(@options[:rm_class])
+        r.read_cls
+        r.read_lrn
+      end
+    end
+
+
+    def process_standard_input
+      input = @stdin.read      
+      # TO DO - process input
+      
+      # [Optional]
+      # @stdin.each do |line| 
+      #  # TO DO - process each line
+      #end
+    end
+
+end #App
+
+# not to be confused with Partition below
+# this will simply remove the specified class
+# from the lrn file
+class RemoveCls
+
+  def initialize(cls_file, lrn_file)
+    @cls = cls_file
+    @lrn = lrn_file
+    # a lookup of the class(es) that we want to remove
+    @classes = Hash.new
+    # window to class hash map
+    @windows = Hash.new
+  end
+
+  def populate_windows(line)
+    a = line.split(/\t/)
+    @windows[a[0]] = a[1]
+    #@classes[a[1]] = true
+  end
+
+  def read_cls
+    f = File.open(@cls)
+    f.each do |line|
+      line.chomp!
+      next if line =~ /%/
+      self.populate_windows(line)
+    end
+  end
+  
+  def read_lrn
+    f = File.open(@lrn)
+    f.each do |line|
+      line.chomp!
+      next if line =~ /%/
+      l = line.split(/\t/)
+      unless self.check_class(l[0])
+        puts line
+      end
+    end
+  end
+
+  def check_class(window)
+    @classes.has_key?(@windows[window])
+  end
+
+  def add_class(c)
+    @classes[c] = true
+  end
+
+end #RemoveCls
+
+# given a ESOM .cls file and a fasta file
+# partition all contigs from a class into a
+# separate file
+class Partition
+  
+  def initialize(cls_file, name_file, fasta_file)
+    @cls = cls_file
+    @name = name_file
+    @fasta = fasta_file
+    @windows = Hash.new
+    @contigs = Hash.new
+    @classes = Hash.new
+  end
+
+  def populate_windows(line)
+    a = line.split(/\t/)
+    @windows[a[0]] = a[1]
+    @classes[a[1]] = true
+  end
+
+  def read_cls
+    f = File.open(@cls)
+    f.each do |line|
+      line.chomp!
+      next if line =~ /%/
+      self.populate_windows(line)
+    end
+  end
+  
+  # take a contig window name and 
+  # convert it back to its original form
+  #  orig_name_x_y assumes that x & y are
+  #  numbers and are separated by underscores
+  def fix_contig_name(name)
+    name.gsub!(/_leftover/,'')
+    if name =~ /(.*)_\d+_\d+/
+      return $1
+    else
+      return name
+    end
+  end
+
+  def read_names
+    f = File.open(@name)
+    f.each do |line|
+      line.chomp!
+      next if line =~ /%/
+      a = line.split(/\t/)
+      if @windows.has_key?(a[0])
+        name = self.fix_contig_name(a[1])
+        @contigs[name] = a[0]
+      end
+    end
+  end
+
+  def extract_class(class_number, out_stream)
+    h = @contigs.select{|k,v| @windows[v] == class_number}
+    ex = Extractor.new(h, false, out_stream)
+    ex.extract(@fasta)
+  end
+
+  def partition_all_classes
+    @classes.each do |k,v|
+      prefix = File.basename(@cls, ".cls")
+      out = self.open_class_file(prefix, k) #File.open("#{prefix}.#{k}.fa", 'w')
+      self.extract_class(k,out)
+      out.close
+    end
+  end
+
+  def open_class_file(prefix, class_name)
+    out = File.open("#{prefix}.#{class_name}.fa", 'w')
+    return out
+  end
+
+end #Partition
+
+# read a fasta file (or many) and extract reads
+# that match a given list
+class Extractor
+  
+  def initialize(wanted_headers, invert, out)
+    @headers = wanted_headers
+    @invert = invert
+    @out_stream = out
+  end
+  
+  def extract(infile)
+    input_file = Bio::FlatFile.open(infile)
+    input_file.each do |entry|
+      if @headers.has_key?(entry.definition)
+        if not @invert
+          @out_stream.puts(entry)
+        end
+ 
+      elsif @invert
+        @out.puts entry
+      #else
+      #  print "#{entry.definition}\n"
+      end
+    end
+  end
+
+end #Extractor
+
+# Create and run the application
+if __FILE__ == $0
+  app = App.new(ARGV, STDIN)
+  app.run
+end

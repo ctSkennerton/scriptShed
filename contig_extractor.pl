@@ -223,9 +223,17 @@ sub sam{
         # test whether the read is paired
         if (($c[1] & 1 ) && ($c[1] & 128)) {
             # test whether the read is the second pair
-            return $c[0]."/2";
+            if($ARGV{'-I'}) { 
+            	return $c[0]."/2";
+            } else {
+            	return $c[0];
+            }
         } else {
-            return $c[0]."/1";
+            if ($ARGV{'-I'}) {
+            	return $c[0]."/1";
+            } else {
+            	return $c[0];
+            }
         }
     }
 }
@@ -240,52 +248,6 @@ sub mannotator{
     return $columns[0];
 }
 
-#sub checkParams 
-#{
-#    my %options;
-#
-#    # Add any other command line options, and the code to handle them
-#    getopts( "i:d:so:c:lbShvfUg",\%options );
-#
-#    # if no arguments supplied print the usage and exit
-#    #
-#   pod2usage if (0 == (keys (%options) ));
-#
-#    # If the -h option is set, print the usage and exit
-#    #
-#    pod2usage if ($options{'h'});
-#    unless ($options{'c'}) {
-#        unless ($options{'S'} || $options{'g'} || $options{'U'} || $options{'b'} || $options{'l'} || $options{'f'} )
-#        {
-#            pod2usage('-msg' => "Please specify one of  -g -S -b -l -f -U");
-#        }
-#    }
-#    unless ($options{'d'}) {
-#        pod2usage('-msg' => "You must specify -d");
-#    }
-#    
-#    if (defined $options{'s'} && !(defined $options{'b'}))
-#    {
-#        pod2usage('-msg' => "The subject flag can only be specified with the blast flag\n");
-#    }
-#
-#    
-#    return \%options;
-#}
-
-
-#sub printAtStart {
-#print<<"EOF";
-#---------------------------------------------------------------- 
-# $0
-# Copyright (C) 2010, 2011, 2012 Connor Skennerton
-#    
-# This program comes with ABSOLUTELY NO WARRANTY;
-# This is free software, and you are welcome to redistribute it
-# under certain conditions: See the source for more details.
-#---------------------------------------------------------------- 
-#EOF
-#}
 
 __END__
 
@@ -344,6 +306,10 @@ Output file name
 
 =for Euclid
     output_file.type: writable
+
+=item -I
+
+If using read names from a sam input file, append Illumina style (/1 or /2). [Default: false]
 
 =item -l
 
@@ -404,7 +370,7 @@ Specify the options the same as option -Ri above
 
 =head1 VERSION
 
- 0.5.1
+ 0.5.2
 
 =head1 DESCRIPTION
 
