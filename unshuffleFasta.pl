@@ -1,8 +1,10 @@
 #!/usr/bin/env perl
 use warnings;
 use strict;
-
-if ($ARGV[0] =~ /[\-]\-h[elp]/) {
+use Getopt::Std;
+my %opts;
+getopts("i:a:b:h",\%opts);
+if (defined $opts{'h'}) {
     print "Usage: unshufle.pl infile.fa forward_reads.fa reverse_reaads.fa\n";
     print "\tforward_reads.fa / reverse_reads.fa : reads to be unshuffled\n";
     print "\tinfile.fa :file containing shuffled fasta reads\n";
@@ -11,25 +13,26 @@ if ($ARGV[0] =~ /[\-]\-h[elp]/) {
 }
 
 my ($in_fh, $out_1_fh, $out_2_fh);
-if($ARGV[0]) {
-    open $in_fh, '<', $ARGV[0] or die $!;
+if(defined $opts{'i'}) {
+    open $in_fh, '<', $opts{'i'} or die $!;
 } else {
     $in_fh = \*STDIN;
 }
-if( $ARGV[1]) {
-    open $out_1_fh, '>', $ARGV[1] or die $!;
+if( $opts{'a'}) {
+    open $out_1_fh, '>', $opts{'a'} or die $!;
 } else {
     $out_1_fh = \*STDOUT;
 }
-if( $ARGV[2]) {
-    open $out_2_fh, '>', $ARGV[2] or die $!;
+if( $opts{'b'}) {
+    open $out_2_fh, '>', $opts{'b'} or die $!;
 } else {
     $out_2_fh = \*STDERR;
 }
 
-my @aux;
+my @aux = undef;
+my($name,$seq,$qual);
 my $read_counter = 0;
-while (my($name,$seq,$qual) = &readfq($in_fh,\@aux)) {
+while (($name,$seq,$qual) = &readfq($in_fh,\@aux)) {
     $read_counter++;
     if($read_counter % 2) {
         # odd numbered read
@@ -93,7 +96,7 @@ sub readfq {
 	while (<$fh>) {
 		chomp;
 		$c = substr($_, 0, 1);
-		last if ($c eq '>' || $c eq '@' || $c eq '+');
+        last if ($c eq '>' || $c eq '@' || $c eq '+');
 		$seq .= $_;
 	}
 	$aux->[0] = $_;
