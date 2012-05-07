@@ -42,6 +42,8 @@ data <- apply(data,1:2,as.numeric)
 svg(options$output)
 
 plot(c(min(data[,4]),max(data[,4])), c(min(data[,3]),max(data[,3])),col="white", xlab="coverage",ylab="gc")
-addBubbles(data[,4],data[,3],data[,2], legend.title="Length", legend.pos=options$legendPos, symbol.bg=rgb(.9,.5,0,.6))
+# fix up the names of the columns as the addBubbles call requires them named this way
+colnames(data) <- c("EID","Z","Y","X")
+addBubbles(data, legend.title="Length", legend.pos=options$legendPos, symbol.bg=rgb(.9,.5,0,.6))
 #symbols(data$coverage, data$gc, circles=data$length, fg="white", bg="red", inches=0.7, ylab="GC", xlab="coverage")
 dev.off()
