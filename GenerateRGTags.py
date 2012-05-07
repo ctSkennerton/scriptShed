@@ -15,10 +15,10 @@ def get_args():
                         GATK not required.")
     parser.add_argument('-DS',type=str,
                         help="Description. GATK Not Required. ")
-    parser.add_argument('-DT',type=str, required=True,
+    parser.add_argument('-DT',type=str,
                         help="Date the run was produced (ISO8601 date or date/time). \
                         GATK Not Required. ")
-    parser.add_argument('-PI',type=int, required=True,
+    parser.add_argument('-PI',type=int,
                         help="Predicted median insert size. GATK Not Required.")
     parser.add_argument('-PL',type=str, required=True,
                         choices = ['CAPILLARY', 'LS454', 'ILLUMINA', 'SOLID', 
@@ -36,15 +36,16 @@ def read2RGId(filename, readMap):
     headers to a corresponding RG identifier"""
     f = open(filename, 'r')
     for line in f:
-        readMap[line.chomp()] = filename
+        readMap[line.rstrip()] = filename
     
 
 def addRG2Header(readMap, files, args):
     """Add read group info to a header."""
 
-    samfile = pysam.Samfile(args.input(), 'r')
+    samfile = pysam.Samfile(args.input, 'r')
     new_header = samfile.header.copy()
     samfile.close()
+    new_header['RG'] = []
     for fn in files:
         # process the reads to get their RG
         read2RGId(fn, readMap)
@@ -65,14 +66,17 @@ def addRG2Header(readMap, files, args):
         RG_template['ID'] = fn
         if args.CN: RG_template['CN'] = args.CN.upper()
         if args.DS: RG_template['DS'] = args.DS
-        RG_template['DT'] = args.DT
-        RG_template['PI'] = args.PI
+        if args.DT: RG_template['DT'] = args.DT
+        if args.PI: RG_template['PI'] = args.PI
+        if args.PL: RG_template['PL'] = args.PL
 
         #RG_template['LB'] = sam_info["sample_name"]
         #RG_template['SM'] = sam_info["sample_name"]
         #RG_template['DS'] = "{0}.{1}".format(sam_info['sample_name'], sam_info['locality'])
         #RG_template['PU'] = '{0}.{1}'.format(sam_info['flowcell_id'], sam_info['lane'])
-        new_header['RG'] = [RG_template]
+        print RG_template
+        new_header['RG'].append( RG_template )
+    print new_header['RG']
     return new_header
 
 
@@ -96,24 +100,24 @@ def add_RGs_2_BAMs_runner(newHeader, readMap, args):
     name, ext = os.path.splitext(filename)
     new_name = name + '.wRG.' + 'bam'
     outfile_name =  os.path.join(path,new_name)
-    outfile = pysam.Samfile( outfile_name, 'wb', header = new_RG_header )
-
+    outfile = pysam.Samfile( outfile_name, 'wb', header = newHeader )
     # Step 2: Process Samfile adding Read Group to Each Read
-    samfile = pysam.Samfile(os.path.join(path, filename))
+    samfile = pysam.Samfile(os.path.join(path, filename), 'rb')
     samfile.fetch()
     for count, read in enumerate(samfile.fetch()):
         name = read.qname
         read_group = readMap[name]
-        new_tags = read.tags
-        new_tags.append(('RG', read_group))
-        read.tags = new_tags
+        if read.tags is None:
+            read.tags = [("RG", read_group)]
+        else:
+            read.tags = read.tags + [('RG',read_group)]
         outfile.write(read)
     outfile.close()
 
     # Step 3: Make index of read group enabled samfile
-    pysam.index(outfile_name)
-    sys.stdout.write(".")
-    sys.stdout.flush()
+    #pysam.index(outfile_name)
+    #sys.stdout.write(".")
+    #sys.stdout.flush()
     return
 
 #def parseFileName(files):
@@ -125,13 +129,13 @@ def add_RGs_2_BAM(args):
         #if filename.endswith('sam') or filename.endswith('bam'):
             #sam_info = parseFileName(filename)
     read_map = {}
-    new_RG_header = addRG2Header(filename, args)
+    new_RG_header = addRG2Header(read_map, args.file, args)
     add_RGs_2_BAMs_runner(new_RG_header, read_map, args)
     return
 
 def main():
     args = get_args()
-    add_RGs_2_BAMs(args)
+    add_RGs_2_BAM(args)
 
 if __name__ == '__main__':
     main()
