@@ -1,11 +1,11 @@
 #!/usr/bin/env perl
 ###############################################################################
 #
-#    __Script__Name__
+#    pair
 #    
-#    <one line to give the program's name and a brief idea of what it does.>
+#    lots of different operations that work with paired reads
 #
-#    Copyright (C) 2012 Michael Imelfort
+#    Copyright (C) 2012 Connor Skennerton
 #
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -29,7 +29,6 @@ use warnings;
 #core Perl modules
 use Getopt::Long;
 use Pod::Usage;
-
 #CPAN modules
 
 #locally-written modules
@@ -42,52 +41,8 @@ BEGIN {
 }
 
 # get input params and print copyright
-my $global_options = checkParams();
+checkParams();
 
-my $in_fh = \*STDIN;
-if(defined $global_options->{'in'}) {
-    open $in_fh, '<', $global_options->{'in'} or die $!;
-}
-
-my $pair_fh = \*STDOUT;
-if(defined $global_options->{'paired'}) {
-    open $pair_fh, '>', $global_options->{'paired'} or die $!;
-}
-
-my $single_fh = \*STDERR;
-if(defined $global_options->{'single'}) {
-    open $single_fh, '>', $global_options->{'single'} or die $!;
-}
-
-my @aux = undef;
-my ($name, $seq, $qual);
-my %pairs_hash;
-while (($name, $seq, $qual) = readfq($in_fh, \@aux)) {
-    if($name =~ /(.*)\/(\d).*/) {
-        push @{$pairs_hash{$1}}, [$name, $seq, $qual, $2];
-    }
-}
-close $in_fh;
-while(my($k,$v) = each %pairs_hash) {
-    if(scalar @{$v} > 1) {
-        foreach my $e (sort {$a->[3] <=> $b->[3]} @{$v}) {
-            if(defined $e->[2]){
-                print $pair_fh "\@$e->[0]\n$e->[1]\n\+$e->[0]\n$e->[2]\n";
-            } else {
-                print $pair_fh ">$e->[0]\n$e->[1]\n";
-            }
-        }
-    } else {
-        if(defined $v->[0]->[2]){
-            print $single_fh "\@$v->[0]->[0]\n$v->[0]->[1]\n\+$v->[0]->[0]\n$v->[0]->[2]\n";
-        } else {
-            print $single_fh ">$v->[0]->[0]\n$v->[0]->[1]\n";
-        }
-    }
-
-}
-close $single_fh;
-close $pair_fh;
 sub readfq {
 	my ($fh, $aux) = @_;
 	@$aux = [undef, 0] if (!defined(@$aux));
@@ -131,29 +86,195 @@ sub readfq {
 	return ($name, $seq);
 }
 
+sub seg_help {
+print "pair segregate [-help|h] [-in|i] [-paired|p] [-single|s]
+
+      [-help -h]                   Displays basic usage information
+      [-in|i]                      Input file [stdin]
+      [-paired|p]                  Output for reads with pairs [stdout]
+      [-single|s]                  Output for reads without pairs [stderr]\n"
+
+}
+
+sub seg_main {
+    #my $ARGV = shift;
+    my @seg_options = ("help|h+", "paired|p:s","in|i:s", "single|s:s");
+    my %options;
+
+    # since I've shifted ARGV earlier the global will
+    # be right for what I want to do
+    GetOptions( \%options, @seg_options );
+
+    if($options{'help'} || scalar keys %options == 0) { &seg_help; exit;}
+
+    my $in_fh = \*STDIN;
+    if(defined $options{'in'}) {
+        open $in_fh, '<', $options{'in'} or die $!;
+    }
+
+    my $pair_fh = \*STDOUT;
+    if(defined $options{'paired'}) {
+        open $pair_fh, '>', $options{'paired'} or die $!;
+    }
+
+    my $single_fh = \*STDERR;
+    if(defined $options{'single'}) {
+        open $single_fh, '>', $options{'single'} or die $!;
+    }
+
+    my @aux = undef;
+    my ($name, $seq, $qual);
+    my %pairs_hash;
+    # go through the input file and take note of which is the first and second read
+    while (($name, $seq, $qual) = readfq($in_fh, \@aux)) {
+        if($name =~ /(.*)\/(\d).*/) {
+            push @{$pairs_hash{$1}}, [$name, $seq, $qual, $2];
+        }
+    }
+    close $in_fh;
+
+    # go through all the reads and determine which are paired and which are single
+    while(my($k,$v) = each %pairs_hash) {
+        if(scalar @{$v} > 1) {
+            foreach my $e (sort {$a->[3] <=> $b->[3]} @{$v}) {
+                if(defined $e->[2]){
+                    print $pair_fh "\@$e->[0]\n$e->[1]\n\+$e->[0]\n$e->[2]\n";
+                } else {
+                    print $pair_fh ">$e->[0]\n$e->[1]\n";
+                }
+            }
+        } else {
+            if(defined $v->[0]->[2]){
+                print $single_fh "\@$v->[0]->[0]\n$v->[0]->[1]\n\+$v->[0]->[0]\n$v->[0]->[2]\n";
+            } else {
+                print $single_fh ">$v->[0]->[0]\n$v->[0]->[1]\n";
+            }
+        }
+    }
+    close $single_fh;
+    close $pair_fh;
+
+
+}
+
+sub match_help {
+    print "pair match [-help|h] [-in|i] -1 FILE -2 FILE [-out|o]
+
+      [-help|h]                    Displays basic usage information
+      [-in|i]                      Input file [stdin]
+       -1 FILE                     Database for first member of pair
+       -2 FILE                     Database for second member of pair
+      [-out|o]                     Output file [stdout]\n";
+}
+
+sub match_print_seq {
+    # pass in the seq and the mate
+    # the mate is considered the second read
+    my ($seq,$mate,$fh) = @_;
+    
+    # I'm assuming here that both the pairs are in the same format
+    if(defined $seq->[1]) {
+        printf($fh, "@%s\n%s\n+\n%s\n@%s\n%s\n+\n%s\n", 
+            $seq->[2], 
+            $seq->[0], 
+            $seq->[1],
+            $mate->[2], 
+            $mate->[0], 
+            $mate->[1]);
+    } else {
+        printf($fh, ">%s\n%s\n>%s\n%s\n", 
+            $seq->[2], 
+            $seq->[0], 
+            $mate->[2], 
+            $mate->[0]);
+    }
+}
+sub match_main {
+
+    my @match_options = ( "help|h+", "in|i:s", "1:s", "2:s", "3:s", "out|o:s" );
+    my %options;
+
+    # since I've shifted ARGV earlier the global will
+    # be right for what I want to do
+    GetOptions( \%options, @match_options );
+
+    if($options{'help'} || scalar keys %options == 0) { &match_help; exit;}
+
+    my $in_fh; # = \*STDIN;
+    if(defined $options{'in'}) {
+        open $in_fh, '<', $options{'in'} or die $!;
+    } else {
+        $in_fh = \*STDIN;
+    }
+    my $out_fh;
+    if(defined $options{'out'}) {
+        open $out_fh, '>', $options{'out'} or die $!;
+    } else {
+        $out_fh = \*STDOUT;
+    }
+
+    my ($one_fh, $two_fh, $three_fh);
+    if(defined $options{'3'}) {
+        $three_fh = &openRead($options{'3'});
+    } else {
+        $one_fh = &openRead($options{'1'});
+        $two_fh = &openRead($options{'2'});
+    }
+
+    #create two separate lists one for the first and second pair members
+    my @aux = undef;
+    my ($name, $seq, $qual);
+    
+    my %one_hash;
+    my %two_hash;
+    # go through the input file and take note of which is the first and second read
+    while (($name, $seq, $qual) = readfq($in_fh, \@aux)) {
+        # remove the trailing segment ID
+        if($name =~ /(.*)\/(\d).*/) {
+            if($2 == 1) {
+                push @{$one_hash{$1.'/2'}}, [$seq, $qual, $name];
+            } else {
+                push @{$two_hash{$1.'/1'}}, [$seq, $qual, $name];
+            }
+        }
+    }
+    close $in_fh;
+
+    # now go through each of the database files looking for
+    # the corresponding mates
+    while (($name, $seq, $qual) = readfq($one_fh, \@aux)) {
+        if(defined $two_hash{$name}) {
+            &match_print_seq([$seq,$qual,$name], $two_hash{$name}, $out_fh );
+        }
+    }
+    # and now for the other file
+    while (($name, $seq, $qual) = readfq($two_fh, \@aux)) {
+        if(defined $one_hash{$name}) {
+            &match_print_seq( $one_hash{$name}, [$seq,$qual,$name], $out_fh );
+        }
+    }
+
+
+
+
+}
 sub checkParams {
     #-----
     # Do any and all options checking here...
     #
-    my @standard_options = ( "help|h+", "paired|p:s","in|i:s", "single|s:s" );
-    my %options;
-
-    # Add any other command line options, and the code to handle them
-    # 
-    GetOptions( \%options, @standard_options );
-
-    # if no arguments supplied print the usage and exit
     #
-    #pod2usage() if (0 == (keys (%options) ));
+    
+    # figure out subcommands
+    my $arg = shift @ARGV;
+    if ($arg eq "segregate") {
+        &seg_main;   
+    } elsif ($arg eq "match") {
+        &match_main; 
+    } else {
+        pod2usage();
+    }
 
-    # If the -help option is set, print the usage and exit
-    #
-    pod2usage() if $options{'help'};
 
-    # Compulsosy items
-    #if(!exists $options{''} ) { print "**ERROR: $0 : \n"; exec("pod2usage $0"); }
-
-    return \%options;
 }
 
 sub printAtStart {
@@ -194,10 +315,10 @@ sub overrideDefault
     #-----
     # Set and override default values for parameters
     #
-    my ($default_value, $option_name) = @_;
-    if(exists $global_options->{$option_name}) 
+    my ($default_value, $option_name, $options) = @_;
+    if(exists $options->{$option_name})
     {
-        return $global_options->{$option_name};
+        return $options->{$option_name};
     }
     return $default_value;
 }
@@ -206,11 +327,11 @@ __DATA__
 
 =head1 NAME
 
-    __Script__Name__
+    pair
 
 =head1 COPYRIGHT
 
-   copyright (C) 2012 Michael Imelfort
+   copyright (C) 2012 connor skennerton
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -231,11 +352,11 @@ __DATA__
 
 =head1 SYNOPSIS
 
-    __Script__Name__  [-help|h] [-in|i] [-paired|p] [-single|s]
+    pair <command> [options]
+    
+    Commands:
+        segregate       Given a single stream of reads, segregate into two streams of paired and unpaired reads
+        match           Given an input stream of reads and two database files, get the other member of the pair
 
-      [-help -h]                   Displays basic usage information
-      [-in|i]                      Input file [stdin]
-      [-paired|p]                  Output for reads with pairs [stdout]
-      [-single|s]                  Output for reads without pairs [stderr]
 =cut
 
