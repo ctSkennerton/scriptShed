@@ -26,8 +26,6 @@
 #
 ###############################################################################
 
-import subprocess
-import os
 from optparse import OptionParser
 import sys
 import pysam

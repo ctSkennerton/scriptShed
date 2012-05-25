@@ -113,9 +113,10 @@ if($ARGV{'-f'}) {
 }
 close $query;
 
-my @aux = undef;
-my ($name,$name2, $seq, $qual);
 foreach my $database (@{$ARGV{'-d'}}) {
+    my @aux = undef;
+    my ($name,$name2, $seq, $qual);
+    warn "parsing $database\n";
     open(DB,'<',$database) or die $!;
     while (($name, $seq, $qual) = readfq(\*DB, \@aux)) 
     {
