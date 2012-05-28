@@ -1,0 +1,259 @@
+#!/bin/bash
+
+# overload grep so that the '-r' option will reverse
+# complement the sequence and grep for both form
+# This works cause GNU Grep has '-r' and '-R' for recurse
+
+GREP_OPTION_STRING=
+REVCOMP=0
+function usage() {
+echo "
+Regexp selection and interpretation:
+  -E     PATTERN is an extended regular expression
+  -F     PATTERN is a set of newline-separated strings
+  -G     PATTERN is a basic regular expression
+  -P     PATTERN is a Perl regular expression
+  -e     use PATTERN as a regular expression
+  -f     obtain PATTERN from FILE
+  -i     ignore case distinctions
+  -w     force PATTERN to match only whole words
+  -x     force PATTERN to match only whole lines
+  -z     a data line ends in 0 byte, not newline
+  -r     Reverse complement DNA sequences
+
+Miscellaneous:
+  -s     suppress error messages
+  -v     select non-matching lines
+  -V     print version information and exit
+
+Output control:
+  -m     stop after NUM matches
+  -b     print the byte offset with output lines
+  -n     print line number with output lines
+  -H     print the filename for each match
+  -h     suppress the prefixing filename on output
+  -o     show only the part of a line matching PATTERN
+  -q     suppress all normal output
+  -a     equivalent to --binary-files=text
+  -I     equivalent to --binary-files=without-match
+  -d     how to handle directories
+         ACTION is 'read', 'recurse', or 'skip'
+  -D     how to handle devices, FIFOs and sockets
+         ACTION is 'read' or 'skip'
+  -R     equivalent to --directories=recurse
+  -L     only print FILE names containing no match
+  -l     only print FILE names containing matches
+  -c     only print a count of matching lines per FILE
+  -Z     print 0 byte after FILE name
+
+Context control:
+  -B     print NUM lines of leading context
+  -A     print NUM lines of trailing context
+  -C     print NUM lines of output context
+  -U     do not strip CR characters at EOL (MSDOS)
+  -u     report offsets as if CRs were not there (MSDOS)"
+}
+
+REVCOMP_STRING=
+
+function revcompl() {
+    reversed=$(echo "$1" | rev)
+    i=0
+    while [ $i -lt ${#reversed} ]; do
+        case ${reversed:$i:1} in
+            T|U)
+                #echo -n "A"
+                REVCOMP_STRING="${REVCOMP_STRING}A"
+                ;;
+            A)
+                #echo -n "T"
+                REVCOMP_STRING="${REVCOMP_STRING}T"
+                ;;
+            G)
+                #echo -n "C"
+                REVCOMP_STRING="${REVCOMP_STRING}C"
+                ;;
+            C)
+                #echo -n "G"
+                REVCOMP_STRING="${REVCOMP_STRING}G"
+                ;;
+            N)
+                REVCOMP_STRING="${REVCOMP_STRING}N"
+                ;;
+
+            t|u)
+                REVCOMP_STRING="${REVCOMP_STRING}a"
+                ;;
+            a)
+                REVCOMP_STRING="${REVCOMP_STRING}t"
+                ;;
+            g)
+                REVCOMP_STRING="${REVCOMP_STRING}c"
+                ;;
+            c)
+                REVCOMP_STRING="${REVCOMP_STRING}g"
+                ;;
+            n)
+                REVCOMP_STRING="${REVCOMP_STRING}n"
+                ;;
+
+            *)
+                echo "The input does not appear to be a DNA sequence"
+                usage
+                exit 1
+                ;;
+        esac
+        let i=i+1
+    done
+}
+
+function revcomp() {
+    # check if its a file
+    if [ -e $1 ]; then
+        while read line
+        do
+            revcompl "$line"
+        done < "$1"
+    else
+        revcompl "$1"
+    fi
+}
+
+while getopts "EFGPe:f:iwxzSvVm:bnHhoqaId:D:RrLlcZB:A:C:Uu" opt; do
+    case $opt in
+        r)
+            REVCOMP=1
+            ;;
+         help)
+            usage
+            exit 0
+            ;;
+        E)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -E"
+            ;;
+        F)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -F"
+            ;;
+        G)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -G"
+            ;;
+        P)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -P"
+            ;;
+        e)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -e $OPTARG"
+            ;;
+        f)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -f $OPTARG"
+            ;;
+        i)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -i"
+            ;;
+        w)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -w"
+            ;;
+        x)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -x"
+            ;;
+        z)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -z"
+            ;;
+        S)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -S"
+            ;;
+        v)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -v"
+            ;;
+        V)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -V"
+            ;;
+        m)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -m $OPTARG"
+            ;;
+        b)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -b"
+            ;;
+        n)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -n"
+            ;;
+        H)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -H"
+            ;;
+        h)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -h"
+            ;;
+        o)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -o"
+            ;;
+        q)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -q"
+            ;;
+        a)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -a"
+            ;;
+        I)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -I"
+            ;;
+        d)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -d $OPTARG"
+            ;;
+        D)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -D $OPTARG"
+            ;;
+        R)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -R"
+            ;;
+        L)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -L"
+            ;;
+        l)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -l"
+            ;;
+        c)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -c"
+            ;;
+        B)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -B $OPTARG"
+            ;;
+        A)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -A $OPTARG"
+            ;;
+        C)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -C $OPTARG"
+            ;;
+        U)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -U"
+            ;;
+        u)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -u"
+            ;;
+        Z)
+            GREP_OPTION_STRING="$GREP_OPTION_STRING -Z"
+            ;;
+
+        \?)
+            echo "Invalid option: -$OPTARG" >&2
+            usage
+            exit 1
+            ;;
+        :)
+            echo "Option -$OPTARG requires an argument." >&2
+            usage
+            exit 1
+            ;;
+    esac
+done
+# remove the options from ARGV
+# the remainder will be the files
+shift $((OPTIND-1))
+
+# now the first option should be the DNA string
+DNA_STRING=$1
+shift
+if (( 1 == $REVCOMP)); then
+    revcomp "$DNA_STRING"
+    grep --color=auto ${GREP_OPTION_STRING} "$DNA_STRING|$REVCOMP_STRING" $@
+else
+    grep --color=auto ${GREP_OPTION_STRING} "$DNA_STRING" $@
+fi
+
