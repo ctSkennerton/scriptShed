@@ -105,7 +105,7 @@ sub seg_main {
     # be right for what I want to do
     GetOptions( \%options, @seg_options );
 
-    if($options{'help'} || scalar keys %options == 0) { &seg_help; exit;}
+    if($options{'help'}) { &seg_help; exit;}
 
     my $in_fh = \*STDIN;
     if(defined $options{'in'}) {
@@ -171,10 +171,9 @@ sub match_print_seq {
     # pass in the seq and the mate
     # the mate is considered the second read
     my ($seq,$mate,$fh) = @_;
-    
     # I'm assuming here that both the pairs are in the same format
     if(defined $seq->[1]) {
-        printf($fh, "@%s\n%s\n+\n%s\n@%s\n%s\n+\n%s\n", 
+        printf($fh "\@%s\n%s\n+\n%s\n\@%s\n%s\n+\n%s\n", 
             $seq->[2], 
             $seq->[0], 
             $seq->[1],
@@ -182,7 +181,7 @@ sub match_print_seq {
             $mate->[0], 
             $mate->[1]);
     } else {
-        printf($fh, ">%s\n%s\n>%s\n%s\n", 
+        printf($fh ">%s\n%s\n>%s\n%s\n", 
             $seq->[2], 
             $seq->[0], 
             $mate->[2], 
@@ -232,25 +231,28 @@ sub match_main {
         # remove the trailing segment ID
         if($name =~ /(.*)\/(\d).*/) {
             if($2 == 1) {
-                push @{$one_hash{$1.'/2'}}, [$seq, $qual, $name];
+                $one_hash{$1.'/2'} = [$seq, $qual, $name];
             } else {
-                push @{$two_hash{$1.'/1'}}, [$seq, $qual, $name];
+                $two_hash{$1.'/1'} = [$seq, $qual, $name];
             }
         }
     }
     close $in_fh;
-
     # now go through each of the database files looking for
     # the corresponding mates
+    @aux = undef;
     while (($name, $seq, $qual) = readfq($one_fh, \@aux)) {
         if(defined $two_hash{$name}) {
-            &match_print_seq([$seq,$qual,$name], $two_hash{$name}, $out_fh );
+            my @tmp_array = ($seq,$qual,$name);
+            &match_print_seq(\@tmp_array, $two_hash{$name}, $out_fh );
         }
     }
     # and now for the other file
+    @aux = undef;
     while (($name, $seq, $qual) = readfq($two_fh, \@aux)) {
         if(defined $one_hash{$name}) {
-            &match_print_seq( $one_hash{$name}, [$seq,$qual,$name], $out_fh );
+            my @tmp_array = ($seq,$qual,$name);
+            &match_print_seq( $one_hash{$name}, \@tmp_array, $out_fh );
         }
     }
 
