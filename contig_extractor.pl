@@ -28,10 +28,13 @@ use strict;
 use warnings;
 
 #core Perl modules
-#use Getopt::Std;
+use IO::Zlib;
+use IO::File;
+use IO::Uncompress::Bunzip2;
 use Pod::Usage;
 #CPAN modules
 use Getopt::Euclid;
+use Bio::Tools::CodonTable;
 #locally-written modules
 
 BEGIN 
@@ -113,12 +116,18 @@ if($ARGV{'-f'}) {
 }
 close $query;
 
+my @aux = undef;
+my ($name,$name2, $seq, $qual);
 foreach my $database (@{$ARGV{'-d'}}) {
-    my @aux = undef;
-    my ($name,$name2, $seq, $qual);
-    warn "parsing $database\n";
-    open(DB,'<',$database) or die $!;
-    while (($name, $seq, $qual) = readfq(\*DB, \@aux)) 
+    my $dfh;
+    if($ARGV{'-z'}) {
+        $dfh = IO::Zlib->new($database,"rb") || die $!;
+    } elsif($ARGV{'-j'}){
+        $dfh = IO::Uncompress::Bunzip2->new($database) || die $!;
+    }else {
+       $dfh = IO::File->new($database, 'r') || die $!;
+    }
+    while (($name, $seq, $qual) = readfq($dfh, \@aux)) 
     {
         $name2 = $name;
         if($ARGV{'-Rd'}) {
@@ -138,19 +147,40 @@ foreach my $database (@{$ARGV{'-d'}}) {
                 print_seq(\$name2,\$seq,\$qual, $outfile);
         }
     }
-    close DB;
+    $dfh->close();
 }
 
 sub print_seq{
     my ($name_ref, $seq_ref, $qual_ref, $fh) = @_;
-    if (defined $$qual_ref)
+    my $seq = $$seq_ref;
+    if(defined $ARGV{'-w'})
+    { 
+        if(defined $ARGV{'-p'})
+        {
+            $seq = fastaCut($seq, $ARGV{'-p'}, $ARGV{'-w'});
+        }
+        else
+        {
+            $seq = fastaCut($seq, 0, $ARGV{'-w'});
+        }
+    }
+    elsif(defined $ARGV{'-p'})
     {
-        # fastq file
-        print $fh "@".$$name_ref."\n".$$seq_ref."\n+".$$name_ref."\n".$$qual_ref."\n";
+        $seq = fastaCut($seq, $ARGV{'-p'}, 0);
     }
     else
     {
-        print $fh ">".$$name_ref."\n".$$seq_ref."\n";
+        $seq .= "\n";
+    }
+
+    if (defined $$qual_ref ^ $ARGV{'-F'})
+    {
+        # fastq file
+        print $fh "@".$$name_ref."\n".$seq."+".$$name_ref."\n".$$qual_ref."\n";
+    }
+    else
+    {
+        print $fh ">".$$name_ref."\n".$seq;
     }
 }
 
@@ -243,12 +273,42 @@ sub gff {
     my @c = split(/\t/, $line);
     return $c[0];
 }
+
 sub mannotator{
     my ($line) = shift;
     my @columns = split /\^/, $line;
     return $columns[0];
 }
 
+sub fastaCut {
+    #-----
+    # Cut up a fasta sequence
+    #
+    my ($string, $prot, $line_wrap) = @_;
+    
+    # translate if need be
+    if(0 != $prot)
+    {
+        my $codon_table = Bio::Tools::CodonTable -> new ( -id => $prot );
+        $string = $codon_table->translate($string);
+    }
+    
+    # wrap the line if need be
+    if(0 != $line_wrap)
+    {
+        my $return_str = "";
+        my $len = length $string;
+        my $start = 0;
+        while($start < $len)
+        {
+            $return_str .= substr $string, $start, $line_wrap;
+            $return_str .="\n";
+            $start += $line_wrap;
+        }
+        return $return_str;
+    }
+    return "$string\n";
+}
 
 __END__
 
@@ -348,6 +408,18 @@ A list of sequence names to extract in the form of a space separated list
 
 Invert the match. ie extract non-matching reads
 
+=item -z
+
+The database file is gziped
+
+=item -j
+
+The database file is bziped
+
+=item -F
+
+Force output to be in fasta format
+
 =item -Ri <separator> <field_num>
 
 The header in the input file contains additional information that must be removed.
@@ -366,6 +438,40 @@ Specify the options the same as option -Ri above
 =for Euclid
     field_num_d.type: i
     field_num_d.type.error: "Please specify an integer for the field number"
+
+=item -w [<wrap_length>]
+
+Wrap the lines at wrap-length chars
+
+=for Euclid
+    wrap_length.type: i
+
+=item -p [<protein_code>]
+
+Enter a code if you wish to convert to protein
+Specify a number from the following list (Uses: Bio::Tools::CodonTable)
+1 Standard
+2 Vertebrate Mitochondrial
+3 Yeast Mitochondrial
+4 Mold, Protozoan,_and_CoelenterateMitochondrial_and_Mycoplasma/Spiroplasma
+5 Invertebrate Mitochondrial
+6 Ciliate, Dasycladacean_and_Hexamita_Nuclear
+9 Echinoderm Mitochondrial
+10 Euplotid Nuclear
+11 Bacterial
+12 Alternative Yeast_Nuclear
+13 Ascidian Mitochondrial
+14 Flatworm Mitochondrial
+15 Blepharisma Nuclear
+16 Chlorophycean Mitochondrial
+21 Trematode Mitochondrial
+22 Scenedesmus obliquus_Mitochondrial
+23 Thraustochytrium Mitochondrial
+
+Default: no conversion
+
+=for Euclid
+    protein_code.type: i
 
 =back
 
