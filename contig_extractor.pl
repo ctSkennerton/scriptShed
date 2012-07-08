@@ -245,7 +245,7 @@ sub blast{
 	}
 }
 
-sub sam{
+sub sam {
     my ($line) = shift;
     my @c = split(/\t/,$line);
     # test whether the third bit is set - query unmapped
