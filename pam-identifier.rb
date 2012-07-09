@@ -134,27 +134,31 @@ Bio::FlatFile.open(Bio::FastaFormat, options[:sequences]) do |ff|
           rend = nil
           lstart = nil
           lend = nil
+          sequence = Bio::Sequence::NA.new(record.seq)
           # fix things up if the spacer is on the negative strand
           if protospacer.start > protospacer.end
             lstart = protospacer.end - options[:length]
             lend = protospacer.end
 
-            rstart = protospacer.start
+            rstart = protospacer.start + 1
             rend = protospacer.start + options[:length]
+            # reverse complement the sequence
+            #sequence = Bio::Sequence::NA.new(record.seq)
+            sequence.reverse_complement!# = Bio::Sequence::NA.new(record.seq).reverse_complement
           else
             lstart = protospacer.start - options[:length]
             lend = protospacer.start
 
-            rstart = protospacer.end
+            rstart = protospacer.end + 1
             rend = protospacer.end + options[:length]
           end
-          if lstart > 0
-            protospacer.left_flank = record.seq.subseq(lstart, lend)
+          if lstart > 0 
+            protospacer.left_flank = sequence.subseq(lstart, lend)
           end
           if rend <= record.seq.length
-            protospacer.right_flank = record.seq.subseq(rstart, rend)
+            protospacer.right_flank = sequence.subseq(rstart, rend)
           end
-          protospacer.sequence = record.seq.subseq(lend + 1,rstart - 1)
+          protospacer.sequence = sequence.subseq(lend + 1,rstart - 1)
           #puts "#{record.seq.subseq(lstart,rend)}"
           #puts "#{protospacer.left_flank}#{protospacer.sequence}#{protospacer.right_flank}"
           #puts

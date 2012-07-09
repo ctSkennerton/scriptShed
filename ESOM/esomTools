@@ -1,52 +1,10 @@
 #!/usr/bin/env ruby 
 
-# == Synopsis 
-#   This is a sample description of the application.
-#   Blah blah blah.
-#
-# == Examples
-#   This command does blah blah blah.
-#     ruby_cl_skeleton foo.txt
-#
-#   Other examples:
-#     ruby_cl_skeleton -q bar.doc
-#     ruby_cl_skeleton --verbose foo.html
-#
-# == Usage 
-#   ruby_cl_skeleton [options] source_file
-#
-#   For help use: ruby_cl_skeleton -h
-#
-# == Options
-#   -h, --help          Displays help message
-#   -v, --version       Display the version, then exit
-#   -q, --quiet         Output as little as possible, overrides verbose
-#   -V, --verbose       Verbose output
-#   TO DO - add additional options
-#
-# == Author
-#   YourName
-#
-# == Copyright
-#   Copyright (c) 2007 YourName. Licensed under the MIT License:
-#   http://www.opensource.org/licenses/mit-license.php
-
-
-# TO DO - replace all ruby_cl_skeleton with your app name
-# TO DO - replace all YourName with your actual name
-# TO DO - update Synopsis, Examples, etc
-# TO DO - change license if necessary
-
-
-
-require 'optparse' 
-require 'date'
-require 'rubygems'
 require 'bio'
-
+require 'optparse'
+require 'bio-logger'
 
 class App
-  VERSION = 0.1
   PROGRAM_NAME = "esomTools"
   
   attr_reader :options
@@ -79,15 +37,6 @@ class App
       # Specify options
       opts = OptionParser.new
       opts.banner = "Usage: #{PROGRAM_NAME} [options]"
-      opts.on('-V', '--version', "Output version information")    { puts VERSION ; exit 0 }
-      opts.on('-P', '--partition', "Given a particular class list, will segregate all contigs from a class into separate fasta files") {@options[:partition_class] = true }
-      opts.on('-R', '--remove', "Delete all the windows of a class from an lrn file") { @options[:rmcls] = true }
-      opts.on('--remove-class [INT]', "An integer value for the class that needs to be removed" ) {|v| @options[:rm_class] = v}
-      opts.on('-c', '--class-file [FILE]', "name of the class file") {|f| @options[:cls_file] = f}
-      opts.on('-f', '--fasta-file [FILE]', "name of the fasta file") {|f| @options[:fasta_file] = f }
-      opts.on('-n', '--name-file [FILE]', "name of the names file") {|f| @options[:name_file] = f }
-      opts.on('-l', '--lrn-file [FILE]', "name of the lrn file") {|f| @options[:lrn_file] = f}
-      opts.on('-v', '--inverse', "inverse the previous operations") { @options[:inverse] = true }
       opts.parse!(@arguments) rescue return false
       
       process_options
@@ -126,17 +75,6 @@ class App
     end
     
     def process_command
-      if @options[:partition_class]
-        p = Parition.new(@options[:cls_file], @options[:name_file], @options[:fasta_file])
-        p.read_cls
-        p.read_names
-        p.partition_all_classes
-      elsif @options[:rmcls]
-        r = RemoveCls.new(@options[:cls_file], @options[:lrn_file])
-        r.add_class(@options[:rm_class])
-        r.read_cls
-        r.read_lrn
-      end
     end
 
 
@@ -214,13 +152,16 @@ class Partition
     @fasta = fasta_file
     @windows = Hash.new
     @contigs = Hash.new
-    @classes = Hash.new
+    @classes = Hash.new{|h,k| h[k] = Array.new}
   end
 
+  # the cls file contains lines of: window\tclass
   def populate_windows(line)
     a = line.split(/\t/)
+    # this window is a member of this class
     @windows[a[0]] = a[1]
-    @classes[a[1]] = true
+    # associate the window with the class
+    @classes[a[1]] << a[0]
   end
 
   def read_cls
@@ -234,11 +175,9 @@ class Partition
   
   # take a contig window name and 
   # convert it back to its original form
-  #  orig_name_x_y assumes that x & y are
-  #  numbers and are separated by underscores
   def fix_contig_name(name)
-    name.gsub!(/_leftover/,'')
-    if name =~ /(.*)_\d+_\d+/
+    name.gsub!(/_leftover.*/,'')
+    if name =~ /(.*)_\d+/
       return $1
     else
       return name
@@ -247,19 +186,42 @@ class Partition
 
   def read_names
     f = File.open(@name)
+    contig_classes = Hash.new
+    
     f.each do |line|
       line.chomp!
       next if line =~ /%/
       a = line.split(/\t/)
+      
       if @windows.has_key?(a[0])
         name = self.fix_contig_name(a[1])
-        @contigs[name] = a[0]
+        #@contigs[name] = @windows[a[0]]
+        
+        if @contigs.has_key?(name)
+          # if the classes don't match assign the contig
+          # to the class of the beast
+          # but first take into account that some windows may have been missed - class '0'
+          # in which case we should do nothing
+          unless (@windows[a[0]] == @contigs[name]) ^ contig_classes[name]
+            if @contigs[name] == '0'
+              @contigs[name] = @windows[a[0]]
+            elsif @windows[a[0]] != '0'
+              $stderr.puts "contig: #{name} is binned in multiple classes! (#{@windows[a[0]]} #{ @contigs[name]})"
+              @contigs[name] = "666"
+              contig_classes[name] = true
+            end
+          end
+        
+        else
+          # associate the class of the first window to the contig
+          @contigs[name] = @windows[a[0]]
+        end
       end
     end
   end
 
   def extract_class(class_number, out_stream)
-    h = @contigs.select{|k,v| @windows[v] == class_number}
+    h = @contigs.select{|k,v| v == class_number}
     ex = Extractor.new(h, false, out_stream)
     ex.extract(@fasta)
   end
@@ -271,11 +233,23 @@ class Partition
       self.extract_class(k,out)
       out.close
     end
+    
+    # extract the contigs mapped in two classes
+    prefix = File.basename(@cls, ".cls")
+    out = self.open_class_file(prefix, "666") #File.open("#{prefix}.#{k}.fa", 'w')
+    self.extract_class("666",out)
+    out.close
   end
 
   def open_class_file(prefix, class_name)
     out = File.open("#{prefix}.#{class_name}.fa", 'w')
     return out
+  end
+
+  def partition
+    self.read_cls
+    self.read_names
+    self.partition_all_classes
   end
 
 end #Partition
@@ -308,8 +282,49 @@ class Extractor
 
 end #Extractor
 
-# Create and run the application
-if __FILE__ == $0
-  app = App.new(ARGV, STDIN)
-  app.run
-end
+if __FILE__ == $0 #needs to be removed if this script is distributed as part of a rubygem
+  SCRIPT_NAME = File.basename(__FILE__); LOG_NAME = SCRIPT_NAME.gsub('.rb','')
+
+  VERSION = "0.1.1"
+  # Parse command line options into the options hash
+  options = {
+    :logger => 'stderr',
+  }
+  o = OptionParser.new do |opts|
+    opts.banner = " Usage: #{SCRIPT_NAME} <arguments>\n Description of what this program does...\n\n"
+
+    opts.on('-V', '--version', "Output version information")    { puts VERSION ; exit 0 }
+    opts.on('-P', '--partition', "Given a particular class list, will segregate all contigs from a class into separate fasta files") {options[:partition_class] = true }
+    opts.on('-R', '--remove', "Delete all the windows of a class from an lrn file") { options[:rmcls] = true }
+    opts.on('--remove-class [INT]', "An integer value for the class that needs to be removed" ) {|v| options[:rm_class] = v}
+    opts.on('-c', '--class-file [FILE]', "name of the class file") {|f| options[:cls_file] = f}
+    opts.on('-f', '--fasta-file [FILE]', "name of the fasta file") {|f| options[:fasta_file] = f }
+    opts.on('-n', '--name-file [FILE]', "name of the names file") {|f| options[:name_file] = f }
+    opts.on('-l', '--lrn-file [FILE]', "name of the lrn file") {|f| options[:lrn_file] = f}
+    opts.on('-v', '--inverse', "inverse the previous operations") { options[:inverse] = true }
+    # logger options
+    opts.on("-q", "--quiet", "Run quietly, set logging to ERROR level [default INFO]") {Bio::Log::CLI.trace('error')}
+    opts.on("--logger filename",String,"Log to file [default #{options[:logger]}]") { |name| options[:logger] = name}
+    opts.on("--trace options",String,"Set log level [default INFO]. e.g. '--trace debug' to set logging level to DEBUG"){|s| Bio::Log::CLI.trace(s)}
+  end
+  o.parse!
+  if ARGV.length != 0
+    $stderr.puts o
+    exit 1
+  end
+  # Setup logging. bio-logger defaults to STDERR not STDOUT, I disagree
+  Bio::Log::CLI.logger(options[:logger]); log = Bio::Log::LoggerPlus.new(LOG_NAME); Bio::Log::CLI.configure(LOG_NAME)
+
+
+  if options[:partition_class]
+    log.info "Partitioning classes"
+    p = Partition.new(options[:cls_file], options[:name_file], options[:fasta_file])
+    p.partition
+  elsif options[:rmcls]
+    r = RemoveCls.new(options[:cls_file], options[:lrn_file])
+    r.add_class(options[:rm_class])
+    r.read_cls
+    r.read_lrn
+  end
+  log.info "Done!"
+end #end if running as a script

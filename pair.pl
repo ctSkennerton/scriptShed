@@ -29,6 +29,8 @@ use warnings;
 #core Perl modules
 use Getopt::Long;
 use Pod::Usage;
+use IO::File;
+use Class::Struct Seq => {name => '$', seq => '$', comment => '$', qual => '$', direction => '$' };
 #CPAN modules
 
 #locally-written modules
@@ -42,6 +44,20 @@ BEGIN {
 
 # get input params and print copyright
 checkParams();
+
+# define a class for out sequences
+
+# constants
+use constant {FORWARD => 0, REVERSE => 1};
+
+sub format_seq {
+    my $seq = shift;
+    if (defined ${$seq}->qual) {
+        return sprintf "@%s\n%s\n+\n%s\n", ${$seq}->name, ${$seq}->seq, ${$seq}->qual;
+    } else {
+        return sprintf ">%s\n%s\n", ${$seq}->name, ${$seq}->seq;
+    }
+}
 
 sub readfq {
 	my ($fh, $aux) = @_;
@@ -87,18 +103,20 @@ sub readfq {
 }
 
 sub seg_help {
-print "pair segregate [-help|h] [-in|i] [-paired|p] [-single|s]
+print "pair segregate [-help|h] [-in|i] [-paired|p] [-single|s] [-n|newbler]
 
       [-help -h]                   Displays basic usage information
       [-in|i]                      Input file [stdin]
       [-paired|p]                  Output for reads with pairs [stdout]
-      [-single|s]                  Output for reads without pairs [stderr]\n"
+      [-single|s]                  Output for reads without pairs [stderr]
+      [-newbler|n]                 Read names use the newbler format by appending
+                                   '.f' or '.r' to the end\n"
 
 }
 
 sub seg_main {
     #my $ARGV = shift;
-    my @seg_options = ("help|h+", "paired|p:s","in|i:s", "single|s:s");
+    my @seg_options = ("help|h+", "1:s", "2:s", "paired|p:s","in|i:s", "single|s:s", "newbler|n+");
     my %options;
 
     # since I've shifted ARGV earlier the global will
@@ -107,19 +125,42 @@ sub seg_main {
 
     if($options{'help'}) { &seg_help; exit;}
 
-    my $in_fh = \*STDIN;
-    if(defined $options{'in'}) {
-        open $in_fh, '<', $options{'in'} or die $!;
+
+    if (defined $options{'paired'} & (defined $options{'1'} | defined $options{'2'})) {
+        &seg_help;
+        exit;
     }
 
-    my $pair_fh = \*STDOUT;
-    if(defined $options{'paired'}) {
-        open $pair_fh, '>', $options{'paired'} or die $!;
+    my $one_fh = \*STDOUT;
+    my $two_fh = \*STDOUT;
+    if ($options{'1'} eq $options{'2'}) {
+        $options{'paired'} = $options{'1'};
+        $options{'1'} = undef;
+        $options{'2'} = undef;
+    }
+
+    if (defined $options{'paired'} ) {
+        $one_fh = IO::File->new($options{'1'},'w') || die $!;
+        $two_fh = $one_fh;
+    } 
+    
+    if (defined $options{'1'}) {
+        $one_fh = IO::File->new($options{'1'},'w') || die $!;
+    } 
+
+    if (defined $options{'2'}) {
+        $two_fh = IO::File->new($options{'2'},'w') || die $!;
+    } 
+
+
+    my $in_fh = \*STDIN;
+    if(defined $options{'in'}) {
+        $in_fh = IO::File->new($options{'in'}, 'r') or die $!;
     }
 
     my $single_fh = \*STDERR;
     if(defined $options{'single'}) {
-        open $single_fh, '>', $options{'single'} or die $!;
+        $single_fh = IO::File->new($options{'single'}, 'w') or die $!;
     }
 
     my @aux = undef;
@@ -127,8 +168,19 @@ sub seg_main {
     my %pairs_hash;
     # go through the input file and take note of which is the first and second read
     while (($name, $seq, $qual) = readfq($in_fh, \@aux)) {
-        if($name =~ /(.*)\/(\d).*/) {
-            push @{$pairs_hash{$1}}, [$name, $seq, $qual, $2];
+        my $current_seq = Seq->new(name => $name,
+                                   seq => $seq,
+                                   comment => undef,
+                                   qual => $qual
+                                  );
+        if($options{'newbler'}) {
+            if($current_seq->name =~ /(.*)\.(f|r)$/) {
+                $current_seq->direction(($2 eq 'f') ? FORWARD : REVERSE);
+                push @{$pairs_hash{$1}}, \$current_seq;
+            }
+        } elsif ($name =~ /(.*)\/(\d).*/) {
+            $current_seq->direction(($2 == 1) ? FORWARD : REVERSE);
+            push @{$pairs_hash{$1}}, \$current_seq;
         }
     }
     close $in_fh;
@@ -136,25 +188,13 @@ sub seg_main {
     # go through all the reads and determine which are paired and which are single
     while(my($k,$v) = each %pairs_hash) {
         if(scalar @{$v} > 1) {
-            foreach my $e (sort {$a->[3] <=> $b->[3]} @{$v}) {
-                if(defined $e->[2]){
-                    print $pair_fh "\@$e->[0]\n$e->[1]\n\+$e->[0]\n$e->[2]\n";
-                } else {
-                    print $pair_fh ">$e->[0]\n$e->[1]\n";
-                }
+            foreach my $e (sort {${$a}->direction <=> ${$b}->direction} @{$v}) {
+                (${$e}->direction == FORWARD) ? $one_fh->print( format_seq($e)) : $two_fh->print(format_seq($e));
             }
         } else {
-            if(defined $v->[0]->[2]){
-                print $single_fh "\@$v->[0]->[0]\n$v->[0]->[1]\n\+$v->[0]->[0]\n$v->[0]->[2]\n";
-            } else {
-                print $single_fh ">$v->[0]->[0]\n$v->[0]->[1]\n";
-            }
+            $single_fh->print( format_seq($v->[0]) );
         }
     }
-    close $single_fh;
-    close $pair_fh;
-
-
 }
 
 sub match_help {

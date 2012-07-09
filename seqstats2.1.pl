@@ -149,7 +149,7 @@ if( exists ($options->{"a"}))
     
 
 #close OUT;
-printAtEnd();
+#printAtEnd();
 exit;
 
 sub calcgc {
