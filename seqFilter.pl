@@ -462,7 +462,7 @@ __DATA__
         the name of the out put file for printing
 
 =for Euclid:
-    output.type: readable
+    output.type: writable
 
  
 =item -l <length> | --length <length>
@@ -515,7 +515,7 @@ wrap the output lines in the fasta to wrap.default
 =for Euclid
     wrap.type: +i
     wrap.type.error: "you must specify a positive integer for -w"
-    wrap.default: 80
+
 
 =item -p <trans_code> | --protein <trans_code>
 

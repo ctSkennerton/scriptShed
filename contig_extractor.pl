@@ -173,7 +173,7 @@ sub print_seq{
         $seq .= "\n";
     }
 
-    if (defined $$qual_ref ^ $ARGV{'-F'})
+    if (defined $$qual_ref ^ defined $ARGV{'-F'})
     {
         # fastq file
         print $fh "@".$$name_ref."\n".$seq."+".$$name_ref."\n".$$qual_ref."\n";

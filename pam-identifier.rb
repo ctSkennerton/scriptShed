@@ -4,6 +4,7 @@ require 'optparse'
 require 'bio-logger'
 require 'csv'
 require 'enumerator'
+require 'bio'
 # small class to hold the information about how each 
 # spacer matches a particular genome
 class ProtoSpacer
@@ -27,11 +28,11 @@ class Spacer
   def initialize(*args)
     if args.size == 1
       # split name here
-      if args[0] =~ /G(\d+)SP(\d+)/
+      if args[0] =~ /G(\d+)(SP|FL)(\d+).*/
         @gid = $1
-        @spid = $2
+        @spid = $3
       else
-        raise ArgumentError, "argument does not fit the form: /G\d+SP\d+/"
+        raise ArgumentError, "argument #{args[0]} does not fit the form: /G\d+SP\d+/"
       end
     elsif args.size == 2
       @gid = args[0]
@@ -58,6 +59,9 @@ SCRIPT_NAME = File.basename(__FILE__); LOG_NAME = SCRIPT_NAME.gsub('.rb','')
 # Parse command line options into the options hash
 options = { #TODO set defaults here
   :logger => 'stderr',
+  :blastfile => nil,
+  :sequences => nil,
+  :length => 15
 }
 o = OptionParser.new do |opts|
   #TODO Fill in usage, description and option parsing below
@@ -80,9 +84,18 @@ o = OptionParser.new do |opts|
   opts.on("--trace options",String,"Set log level [default INFO]. e.g. '--trace debug' to set logging level to DEBUG") do | s |
     Bio::Log::CLI.trace(s)
   end
+  opts.on("-b", "--blastfile FILE", "Input blast outfile in (6/8 format) containing spacer matches to phage contigs") do |b|
+    options[:blastfile] = b
+  end
+  opts.on("-c", "--contigs FILE", "Input fasta file containing phage contigs") do |c|
+    options[:sequences] = c
+  end
+  opts.on("-l","--length INT", "length of the flanking region of the protospacer [default: #{options[:length]}") do |l|
+    options[:length] = l.to_i
+  end
 end
 o.parse!
-if ARGV.length != 0 #TODO require a set number of arguments?
+unless options[:blastfile] and options[:sequences] #TODO require a set number of arguments?
   $stderr.puts o
   exit 1
 end
@@ -93,66 +106,76 @@ Bio::Log::CLI.configure(LOG_NAME)
 
 
 #TODO what are you looking at me for? This is your script. Do something.
-log.info 'e.g. logging'
+#log.info 'e.g. logging'
 
 spacers = Hash.new
 targets = Hash.new{|h,k| h[k] = Array.new}
 # parse the blast file and determine the locations of the spacers
-Bio::Blast::Report.new(options[:blastfile]) do |report|
+File.open(options[:blastfile],"r") do |report|
   report.each do |hit|
-    unless spacers.has_key?(hit.query_id)
-      sp = Spacer.new(hit.query_id)
-      spacers[hit.query_id] = sp
+    fields = hit.split(/\t/)
+    unless spacers.has_key?(fields[0])
+      sp = Spacer.new(fields[0])
+      spacers[fields[0]] = sp
     end
-    targets[hit.target_id] << sp
-    proto = ProtoSpacer.new(hit.target_id, hit.target_start, hit.target_end)
-    spacers[hit.query_id] << proto
+    targets[fields[1]] << spacers[fields[0]]
+    proto = ProtoSpacer.new(fields[1], fields[8].to_i, fields[9].to_i)
+    spacers[fields[0]] << proto
   end
 end
 
 # Now go though the sequences file and cut ~15bp from either side of the spacers for each CRISPR
 Bio::FlatFile.open(Bio::FastaFormat, options[:sequences]) do |ff|
   ff.each do |record|
-    targets[record.definition].each do |spacer|
-      spacer.find_all{|i| i.genome == record.definition}.each do |protospacer|
-        rstart = nil
-        rend = nil
-        lstart = nil
-        lend = nil
-        # fix things up if the spacer is on the negative strand
-        if protospacer.start > protospacer.end
-          lstart = protospacer.end - options[:length]
-          lend = protospacer.end
-          
-          rstart = protospacer.start
-          rend = protospacer.start + options[:length]
-        else
-          lstart = protospacer.start - options[:length]
-          lend = protospacer.start
-          
-          rstart = protospacer.end
-          rend = protospacer.end + options[:length]
+    if targets.has_key?(record.definition)
+      targets[record.definition].each do |spacer|
+        spacer.find_all{|i| i.genome == record.definition}.each do |protospacer|
+          rstart = nil
+          rend = nil
+          lstart = nil
+          lend = nil
+          sequence = Bio::Sequence::NA.new(record.seq)
+          # fix things up if the spacer is on the negative strand
+          if protospacer.start > protospacer.end
+            lstart = protospacer.end - options[:length]
+            lend = protospacer.end
+
+            rstart = protospacer.start + 1
+            rend = protospacer.start + options[:length]
+            # reverse complement the sequence
+            #sequence = Bio::Sequence::NA.new(record.seq)
+            sequence.reverse_complement!# = Bio::Sequence::NA.new(record.seq).reverse_complement
+          else
+            lstart = protospacer.start - options[:length]
+            lend = protospacer.start
+
+            rstart = protospacer.end + 1
+            rend = protospacer.end + options[:length]
+          end
+          if lstart > 0 
+            protospacer.left_flank = sequence.subseq(lstart, lend)
+          end
+          if rend <= record.seq.length
+            protospacer.right_flank = sequence.subseq(rstart, rend)
+          end
+          protospacer.sequence = sequence.subseq(lend + 1,rstart - 1)
+          #puts "#{record.seq.subseq(lstart,rend)}"
+          #puts "#{protospacer.left_flank}#{protospacer.sequence}#{protospacer.right_flank}"
+          #puts
         end
-        if lstart > 0
-          protospacer.left_flank = record.seq.subseq(lstart, lend)
-        end
-        if rend <= record.seq.length
-          protospacer.right_flank = record.seq.subseq(rstart, rend)
-        end
-        protospacer.sequence = record.seq.subseq(lend,rstart)
       end
     end
   end
 end
 
 crisprs = Hash.new{|h,k| h[k] = Array.new}
-spacers.each do |sp|
+spacers.each do |spid,sp|
   crisprs[sp.gid] << sp
 end
 
 crisprs.each do |group, spacers|
-  rfile = File.open("#{group}.protospacers.r.fa", "w")
-  lfile = File.open("#{group}.protospacers.l.fa", "w")
+  rfile = File.open("G#{group}.protospacers.r.fa", "w")
+  lfile = File.open("G#{group}.protospacers.l.fa", "w")
   spacers.each do |spacer|
     spacer.each do |proto|
       header = ">G#{group}SP#{spacer.spid} Target=#{proto.genome} #{proto.start} #{proto.end};"
@@ -162,7 +185,7 @@ crisprs.each do |group, spacers|
       end
       if proto.left_flank
         lfile.puts "#{header} left flank (#{options[:length]}bp)"
-        lfile.puts left_flank
+        lfile.puts proto.left_flank
       end
     end
   end
