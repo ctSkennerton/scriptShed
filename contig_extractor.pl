@@ -151,7 +151,7 @@ foreach my $database (@{$ARGV{'-d'}}) {
 sub format_seq {
     my $seq = shift;
     if (defined ${$seq}->qual) {
-        return sprintf "@%s\n%s+\n%s\n", ${$seq}->name, ${$seq}->seq, ${$seq}->qual;
+        return sprintf "@%s%s\n%s+\n%s\n", ${$seq}->name, (defined ${$seq}->comment ^ defined $ARGV{'-C'}) ? ${$seq}->comment : '', ${$seq}->seq, ${$seq}->qual;
     } else {
         if (defined ${$seq}->comment ^ defined $ARGV{'-C'}) {
             return sprintf ">%s%s\n%s", ${$seq}->name, ${$seq}->comment, ${$seq}->seq;
