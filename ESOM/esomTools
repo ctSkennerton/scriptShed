@@ -3,6 +3,7 @@
 require 'bio'
 require 'optparse'
 require 'bio-logger'
+require 'enumerator'
 
 class App
   PROGRAM_NAME = "esomTools"
@@ -141,6 +142,68 @@ class RemoveCls
 
 end #RemoveCls
 
+# this class is designed to work with 
+# the Partition class below.
+# we store all of the windows for a contig as well as the 
+# class that each window belonged to
+class Contig
+  include Enumerable
+  def initialize(name)
+    @name = name
+    @windows = Hash.new # elements are the window name and the class
+  end
+  
+  def each
+    @windows.each{|k,v| yield k,v}
+  end
+
+  def []=(k,v)
+    @windows[k] = v
+  end
+
+  def [](k)
+    @windows[k]
+  end
+
+  # what percentage of the windows are covered by the 
+  # most abundant class
+  def mode_coverage(percent)
+    coverage_hash = Hash.new(0)
+    @windows.each{|k,v| coverage_hash[v] += 1}
+    max = 0
+    max_class = nil
+    coverage_hash.each do |k,v|
+      if (v > max) 
+        max = v 
+        max_class = k
+      end  
+    end
+    if max/@windows.length > percent
+      return max_class
+    end
+    return nil
+  end
+
+  def to_s
+    if @windows.length != @windows.keys.length
+      raise Exception, "Lengths do not match"
+    end
+    ret_str = ''
+    ret_str += "#{@name}\n"
+    ret_str += "." * @windows.length
+    ret_str += "\n"
+    ret_str += "^" * @windows.length 
+    ret_str += "\n"
+    @windows.keys.sort.each{|i| ret_str += (@windows[i].length == 1)? @windows[i] : @windows[i].slice(0,1) }
+    ret_str += "\n"
+    @windows.keys.sort.each{|i| ret_str += (@windows[i].length == 2)? @windows[i].slice(1,1) : ' ' }
+
+    ret_str += "\n"
+    ret_str
+  end
+
+end # Contig
+
 # given a ESOM .cls file and a fasta file
 # partition all contigs from a class into a
 # separate file
@@ -198,32 +261,47 @@ class Partition
         #@contigs[name] = @windows[a[0]]
         
         if @contigs.has_key?(name)
+          current_contig = @contigs[name]
+          current_contig[a[1]] = @windows[a[0]]
           # if the classes don't match assign the contig
           # to the class of the beast
           # but first take into account that some windows may have been missed - class '0'
           # in which case we should do nothing
-          unless (@windows[a[0]] == @contigs[name]) ^ contig_classes[name]
-            if @contigs[name] == '0'
-              @contigs[name] = @windows[a[0]]
-            elsif @windows[a[0]] != '0'
-              $stderr.puts "contig: #{name} is binned in multiple classes! (#{@windows[a[0]]} #{ @contigs[name]})"
-              @contigs[name] = "666"
-              contig_classes[name] = true
-            end
-          end
+         # unless (@windows[a[0]] == @contigs[name]) ^ contig_classes[name]
+         #   if @contigs[name] == '0'
+         #     @contigs[name] = @windows[a[0]]
+         #   elsif @windows[a[0]] != '0'
+         #     $stderr.puts "contig: #{name} is binned in multiple classes! (#{@windows[a[0]]} #{ @contigs[name]})"
+         #     @contigs[name] = "666"
+         #     contig_classes[name] = true
+         #   end
+         # end
         
         else
-          # associate the class of the first window to the contig
-          @contigs[name] = @windows[a[0]]
+          # new contig, make a new object
+          new_contig = Contig.new(name)
+          new_contig[a[1]] = @windows[a[0]]
+          @contigs[name] = new_contig #Contig.new(name) #@windows[a[0]]
         end
       end
     end
   end
+  
+  def print_contig
+    @contigs.each do |k,v|
+      assigned_class = v.mode_coverage(0.8)
+      if assigned_class
+        puts "assigning to class #{assigned_class}"
+      end
+      puts v.to_s
+    end
+  end
 
   def extract_class(class_number, out_stream)
-    h = @contigs.select{|k,v| v == class_number}
-    ex = Extractor.new(h, false, out_stream)
-    ex.extract(@fasta)
+    print_contig
+    #h = @contigs.select{|k,v| v == class_number}
+    #ex = Extractor.new(h, false, out_stream)
+    #ex.extract(@fasta)
   end
 
   def partition_all_classes

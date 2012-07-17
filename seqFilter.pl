@@ -87,16 +87,18 @@ if($ARGV{'-i'}) {
 while (($name, $seq, $qual) = &readfq($infile, \@aux)) {
     if ((&length_test(\$seq) & &gc_test(\$seq)) ^ defined $ARGV{'-v'}) {
 
-        if($ARGV{'-r'}) {
-            if ($ARGV{'-h'}) {
-                my $h_len = human_output(length $seq);
-                my $h_gc = human_output(calcgc(\$seq));
-                $outfile->printf("%s\t%s\t%s\n", $name, $h_len, $h_gc);
+        unless( exists $ARGV{'-A'}) {
+            if(exists $ARGV{'-r'} ) {
+                if ($ARGV{'-h'}) {
+                    my $h_len = human_output(length $seq);
+                    my $h_gc = human_output(calcgc(\$seq));
+                    $outfile->printf("%s\t%s\t%s\n", $name, $h_len, $h_gc);
+                } else {
+                    $outfile->printf("%s\t%d\t%.4f\n", $name, length $seq, calcgc(\$seq));
+                }
             } else {
-                $outfile->printf("%s\t%d\t%.4f\n", $name, length $seq, calcgc(\$seq));
+                print_seq(\$name,\$seq,\$qual, $outfile);
             }
-        } else {
-            print_seq(\$name,\$seq,\$qual, $outfile);
         }
         $seq_count++;
         $total_base += length $seq;
@@ -104,19 +106,15 @@ while (($name, $seq, $qual) = &readfq($infile, \@aux)) {
     } 
 }
 $infile->close();
-print $total_gc,"\n";
-if( exists ($ARGV{"-a"})) 
-    {
-    if ($seq_count > 1)
-        {
+if( exists $ARGV{"-a"} | exists $ARGV{'-A'}) 
+{
+    if ($seq_count > 1) {
         my $n50 = $total_base / ($seq_count / 2);
-        printf "\n\n %s with an average length of %s and an n50 of %s\n\n", human_output($total_base), human_output($total_base / $seq_count), human_output($n50);
-		}
-    else
-        {
+        printf "\n\n%s sequences %s with an average length of %s and an n50 of %s\n\n", $seq_count,human_output($total_base), human_output($total_base / $seq_count), human_output($n50);
+    } else {
         printf "\n\n %s \n\n", human_output($total_base);
-        }
     }
+}
 
 #close OUT;
 printAtEnd();
@@ -450,7 +448,7 @@ __DATA__
  
 =over
 
-=item -i <input_file> | --input <input_file>
+=item -i <input_file> | --input <input_file> | -d <input_file> | --db <input_file>
 
         the name of the fasta file to be parsed
  
@@ -544,6 +542,10 @@ The input file is bziped
 =item -h
 
 Human readable output
+
+=item -A
+
+Print only the summary statistics (implies -a)
 
 =back                      
 
