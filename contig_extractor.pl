@@ -1,8 +1,6 @@
 #!/usr/bin/perl
 ###############################################################################
 #
-#    this script extracts sequences from a multiple fasta file based on the 
-#	 matches obtained from a blast file in m8 format
 #
 #    Copyright (C) 2010, 2011, 2012 Connor Skennerton
 #
@@ -31,11 +29,13 @@ use warnings;
 use IO::Zlib;
 use IO::File;
 use IO::Uncompress::Bunzip2;
-use Pod::Usage;
+use Data::Dumper;
 #CPAN modules
 use Getopt::Euclid;
 use Bio::Tools::CodonTable;
 #locally-written modules
+use Class::Struct Seq => {name => '$', seq => '$', comment => '$', qual => '$' };
+
 
 BEGIN 
 	{
@@ -64,14 +64,13 @@ my %seqs;
 
 if($ARGV{'-f'}) {
     my @aux = undef;
-    my ($name, $seq, $qual);
-    while (($name, $seq, $qual) = &readfq($query, \@aux)) {
+    while (my $seq = &readfq($query, \@aux)) {
         if($ARGV{'-Ri'}) {
             # perform the split according to the user
-            my @p = split(/$ARGV{'-Ri'}->{separator}/, $name);
-            $name = $p[$ARGV{'-Ri'}->{field_num}];
+            my @p = split(/$ARGV{'-Ri'}->{separator}/, $seq->name);
+            $seq->name($p[$ARGV{'-Ri'}->{field_num}]);
         }
-        $seqs{$name} = 1;
+        $seqs{$seq->name} = 1;
     }
 } elsif (! defined $ARGV{'-n'}) {
     while (my $line = <$query>) 
@@ -117,7 +116,6 @@ if($ARGV{'-f'}) {
 close $query;
 
 my @aux = undef;
-my ($name,$name2, $seq, $qual);
 foreach my $database (@{$ARGV{'-d'}}) {
     my $dfh;
     if($ARGV{'-z'}) {
@@ -127,61 +125,105 @@ foreach my $database (@{$ARGV{'-d'}}) {
     }else {
        $dfh = IO::File->new($database, 'r') || die $!;
     }
-    while (($name, $seq, $qual) = readfq($dfh, \@aux)) 
+    while (my $seq = readfq($dfh, \@aux)) 
     {
-        $name2 = $name;
+        my $name2 = $seq->name;
         if($ARGV{'-Rd'}) {
             # perform the split according to the user
-            my @p = split(/$ARGV{'-Rd'}->{separator_d}/, $name);
-            $name = $p[$ARGV{'-Rd'}->{field_num_d}];
+            my @p = split(/$ARGV{'-Rd'}->{separator_d}/, $seq->name);
+            $name2 =  $p[$ARGV{'-Rd'}->{field_num_d}];
         }
-        if (exists $seqs{$name})
+        if (exists $seqs{$name2})
         {
             unless($ARGV{'-v'})
             {
-                print_seq(\$name2,\$seq,\$qual, $outfile);
+                print_seq(\$seq, $outfile);
             }
         }
         elsif ($ARGV{'-v'})
         {
-                print_seq(\$name2,\$seq,\$qual, $outfile);
+                print_seq(\$seq, $outfile);
         }
     }
     $dfh->close();
 }
 
+sub format_seq {
+    my $seq = shift;
+    if (defined ${$seq}->qual) {
+        return sprintf "@%s\n%s+\n%s\n", ${$seq}->name, ${$seq}->seq, ${$seq}->qual;
+    } else {
+        if (defined ${$seq}->comment ^ defined $ARGV{'-C'}) {
+            return sprintf ">%s%s\n%s", ${$seq}->name, ${$seq}->comment, ${$seq}->seq;
+        }
+        return sprintf ">%s\n%s", ${$seq}->name, ${$seq}->seq;
+    }
+}
+
+sub fastaCut {
+    #-----
+    # Cut up a fasta sequence
+    #
+    my ($string, $prot, $line_wrap) = @_;
+    
+    # translate if need be
+    if(0 != $prot)
+    {
+        my $codon_table = Bio::Tools::CodonTable -> new ( -id => $prot );
+        $string = $codon_table->translate($string);
+    }
+    
+    # wrap the line if need be
+    if(0 != $line_wrap)
+    {
+        my $return_str = "";
+        my $len = length $string;
+        my $start = 0;
+        while($start < $len)
+        {
+            $return_str .= substr $string, $start, $line_wrap;
+            $return_str .="\n";
+            $start += $line_wrap;
+        }
+        return $return_str;
+    }
+    return "$string\n";
+}
+
 sub print_seq{
-    my ($name_ref, $seq_ref, $qual_ref, $fh) = @_;
-    my $seq = $$seq_ref;
+    my ($seq_ref, $fh) = @_;
+    
     if(defined $ARGV{'-w'})
     { 
         if(defined $ARGV{'-p'})
         {
-            $seq = fastaCut($seq, $ARGV{'-p'}, $ARGV{'-w'});
+            ${$seq_ref}->seq( fastaCut(${$seq_ref}->seq, $ARGV{'-p'}, $ARGV{'-w'}) );
         }
         else
         {
-            $seq = fastaCut($seq, 0, $ARGV{'-w'});
+            ${$seq_ref}->seq( fastaCut(${$seq_ref}->seq, 0, $ARGV{'-w'}) );
         }
     }
     elsif(defined $ARGV{'-p'})
     {
-        $seq = fastaCut($seq, $ARGV{'-p'}, 0);
+         ${$seq_ref}->seq( fastaCut(${$seq_ref}->seq, $ARGV{'-p'}, 0) );
     }
     else
     {
-        $seq .= "\n";
+        ${$seq_ref}->seq( ${$seq_ref}->seq."\n");
     }
 
-    if (defined $$qual_ref ^ defined $ARGV{'-F'})
-    {
-        # fastq file
-        print $fh "@".$$name_ref."\n".$seq."+".$$name_ref."\n".$$qual_ref."\n";
-    }
-    else
-    {
-        print $fh ">".$$name_ref."\n".$seq;
-    }
+    print $fh format_seq($seq_ref);
+
+    #if (defined ${$seq_ref}->qual ^ defined $ARGV{'-F'})
+    #{
+        ## fastq file
+        #print $fh "@".$$name_ref."\n".$seq."+".$$name_ref."\n".$$qual_ref."\n";
+    #}
+    #else
+    #{
+        #print $fh ">".$$name_ref."\n".$seq;
+    #}
 }
 
 sub readfq {
@@ -201,7 +243,10 @@ sub readfq {
 			return;
 		}
 	}
-	my $name = /^.(\S+)/? $1 : '';
+    my $current_seq = Seq->new();
+	/^.(\S+)(.*)/;
+    $current_seq->name($1);
+    $current_seq->comment($2);
 	my $seq = '';
 	my $c;
 	$aux->[0] = undef;
@@ -213,20 +258,21 @@ sub readfq {
 	}
 	$aux->[0] = $_;
 	$aux->[1] = 1 if (!defined($aux->[0]));
-	return ($name, $seq) if ($c ne '+');
+    $current_seq->seq($seq);
+	return $current_seq if ($c ne '+');
 	my $qual = '';
 	while (<$fh>) {
 		chomp;
 		$qual .= $_;
 		if (length($qual) >= length($seq)) {
 			$aux->[0] = undef;
-			return ($name, $seq, $qual);
+            $current_seq->qual($qual);
+			return $current_seq;
 		}
 	}
 	$aux->[1] = 1;
-	return ($name, $seq);
+	return $current_seq;
 }
-
 sub list{
   	my ($line) = shift;
 	return $line;
@@ -245,7 +291,7 @@ sub blast{
 	}
 }
 
-sub sam{
+sub sam {
     my ($line) = shift;
     my @c = split(/\t/,$line);
     # test whether the third bit is set - query unmapped
@@ -280,35 +326,6 @@ sub mannotator{
     return $columns[0];
 }
 
-sub fastaCut {
-    #-----
-    # Cut up a fasta sequence
-    #
-    my ($string, $prot, $line_wrap) = @_;
-    
-    # translate if need be
-    if(0 != $prot)
-    {
-        my $codon_table = Bio::Tools::CodonTable -> new ( -id => $prot );
-        $string = $codon_table->translate($string);
-    }
-    
-    # wrap the line if need be
-    if(0 != $line_wrap)
-    {
-        my $return_str = "";
-        my $len = length $string;
-        my $start = 0;
-        while($start < $len)
-        {
-            $return_str .= substr $string, $start, $line_wrap;
-            $return_str .="\n";
-            $start += $line_wrap;
-        }
-        return $return_str;
-    }
-    return "$string\n";
-}
 
 __END__
 
@@ -473,11 +490,15 @@ Default: no conversion
 =for Euclid
     protein_code.type: i
 
+=item -C 
+
+Do not print comments in fasta files
+
 =back
 
 =head1 VERSION
 
- 0.5.2
+ 0.5.3
 
 =head1 DESCRIPTION
 

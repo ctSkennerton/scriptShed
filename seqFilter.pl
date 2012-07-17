@@ -514,6 +514,7 @@ wrap the output lines in the fasta to wrap.default
     wrap.type: +i
     wrap.type.error: "you must specify a positive integer for -w"
 
+
 =item -p <trans_code> | --protein <trans_code>
 
 =for Euclid
