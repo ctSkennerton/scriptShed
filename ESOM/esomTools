@@ -148,9 +148,11 @@ end #RemoveCls
 # class that each window belonged to
 class Contig
   include Enumerable
-  def initialize(name)
+  attr_reader :name
+  def initialize(name, log)
     @name = name
     @windows = Hash.new # elements are the window name and the class
+    @@log = log
   end
   
   def each
@@ -167,9 +169,16 @@ class Contig
 
   # what percentage of the windows are covered by the 
   # most abundant class
-  def mode_coverage(percent)
+  def mode_coverage(percent, zero_insignificant)
+
     coverage_hash = Hash.new(0)
-    @windows.each{|k,v| coverage_hash[v] += 1}
+    length = @windows.length
+    @windows.each do |k,v| 
+      if zero_insignificant & (v == '0')
+        length -= 1
+      end
+      coverage_hash[v] += 1
+    end
     max = 0
     max_class = nil
     coverage_hash.each do |k,v|
@@ -178,18 +187,21 @@ class Contig
         max_class = k
       end  
     end
-    if max/@windows.length > percent
+    
+    if max_class == '0'
+    #  @@log.info self
+      return max_class
+    elsif max.to_f/length.to_f >= percent
+    #  @@log.info self
       return max_class
     end
-    return nil
+    #@@log.debug "#{max}/#{length}(orig: #{@windows.length}) < #{percent} (#{max.to_f/length.to_f})"
+    @@log.warn "CANNOT RESOLVE BIN FOR: #{self}"
+    return '666'
   end
 
   def to_s
-    if @windows.length != @windows.keys.length
-      raise Exception, "Lengths do not match"
-    end
-    ret_str = ''
-    ret_str += "#{@name}\n"
+    ret_str = "#{@name}\n"
     ret_str += "." * @windows.length
     ret_str += "\n"
     ret_str += "^" * @windows.length 
@@ -197,7 +209,6 @@ class Contig
     @windows.keys.sort.each{|i| ret_str += (@windows[i].length == 1)? @windows[i] : @windows[i].slice(0,1) }
     ret_str += "\n"
     @windows.keys.sort.each{|i| ret_str += (@windows[i].length == 2)? @windows[i].slice(1,1) : ' ' }
-
     ret_str += "\n"
     ret_str
   end
@@ -208,14 +219,14 @@ end # Contig
 # partition all contigs from a class into a
 # separate file
 class Partition
-  
-  def initialize(cls_file, name_file, fasta_file)
+  def initialize(cls_file, name_file, fasta_file, logger)
     @cls = cls_file
     @name = name_file
     @fasta = fasta_file
     @windows = Hash.new
     @contigs = Hash.new
     @classes = Hash.new{|h,k| h[k] = Array.new}
+    @@log = logger
   end
 
   # the cls file contains lines of: window\tclass
@@ -223,8 +234,6 @@ class Partition
     a = line.split(/\t/)
     # this window is a member of this class
     @windows[a[0]] = a[1]
-    # associate the window with the class
-    @classes[a[1]] << a[0]
   end
 
   def read_cls
@@ -263,23 +272,9 @@ class Partition
         if @contigs.has_key?(name)
           current_contig = @contigs[name]
           current_contig[a[1]] = @windows[a[0]]
-          # if the classes don't match assign the contig
-          # to the class of the beast
-          # but first take into account that some windows may have been missed - class '0'
-          # in which case we should do nothing
-         # unless (@windows[a[0]] == @contigs[name]) ^ contig_classes[name]
-         #   if @contigs[name] == '0'
-         #     @contigs[name] = @windows[a[0]]
-         #   elsif @windows[a[0]] != '0'
-         #     $stderr.puts "contig: #{name} is binned in multiple classes! (#{@windows[a[0]]} #{ @contigs[name]})"
-         #     @contigs[name] = "666"
-         #     contig_classes[name] = true
-         #   end
-         # end
-        
         else
           # new contig, make a new object
-          new_contig = Contig.new(name)
+          new_contig = Contig.new(name, @@log)
           new_contig[a[1]] = @windows[a[0]]
           @contigs[name] = new_contig #Contig.new(name) #@windows[a[0]]
         end
@@ -289,44 +284,32 @@ class Partition
   
   def print_contig
     @contigs.each do |k,v|
-      assigned_class = v.mode_coverage(0.8)
-      if assigned_class
-        puts "assigning to class #{assigned_class}"
-      end
-      puts v.to_s
+      puts v
     end
-  end
-
-  def extract_class(class_number, out_stream)
-    print_contig
-    #h = @contigs.select{|k,v| v == class_number}
-    #ex = Extractor.new(h, false, out_stream)
-    #ex.extract(@fasta)
   end
 
   def partition_all_classes
-    @classes.each do |k,v|
-      prefix = File.basename(@cls, ".cls")
-      out = self.open_class_file(prefix, k) #File.open("#{prefix}.#{k}.fa", 'w')
-      self.extract_class(k,out)
-      out.close
-    end
-    
-    # extract the contigs mapped in two classes
     prefix = File.basename(@cls, ".cls")
-    out = self.open_class_file(prefix, "666") #File.open("#{prefix}.#{k}.fa", 'w')
-    self.extract_class("666",out)
-    out.close
+    
+    mapping = Hash.new
+    @classes.each do |k,v|
+      v.each{|contig| mapping[contig.name] = k}
+    end
+
+    ex = Extractor.new(mapping, false, prefix, "fa")
+    ex.extract(@fasta)
   end
 
-  def open_class_file(prefix, class_name)
-    out = File.open("#{prefix}.#{class_name}.fa", 'w')
-    return out
+  def classify_contigs
+    @contigs.each_value do |v|
+      @classes[ v.mode_coverage(0.7, true) ] << v
+    end
   end
 
   def partition
     self.read_cls
     self.read_names
+    self.classify_contigs
     self.partition_all_classes
   end
 
@@ -336,24 +319,32 @@ end #Partition
 # that match a given list
 class Extractor
   
-  def initialize(wanted_headers, invert, out)
-    @headers = wanted_headers
+  def initialize(mapping, invert, prefix, extension)
+    @mapping = mapping
     @invert = invert
-    @out_stream = out
+    @prefix = prefix
+    @extension = extension
   end
   
+  def make_file_name(unique)
+    "#{@prefix}.#{unique}.#{@extension}"
+  end
+
+  def append_file(file,seq)
+    out = File.open(file, 'a')
+    out.puts seq
+    out.close
+  end
+
   def extract(infile)
     input_file = Bio::FlatFile.open(infile)
     input_file.each do |entry|
-      if @headers.has_key?(entry.definition)
+      if @mapping.has_key?(entry.definition)
         if not @invert
-          @out_stream.puts(entry)
+          self.append_file(self.make_file_name(@mapping[entry.definition]), entry)
         end
- 
       elsif @invert
-        @out.puts entry
-      #else
-      #  print "#{entry.definition}\n"
+        self.append_file(self.make_file_name("NOCLASS"), entry)
       end
     end
   end
@@ -363,7 +354,7 @@ end #Extractor
 if __FILE__ == $0 #needs to be removed if this script is distributed as part of a rubygem
   SCRIPT_NAME = File.basename(__FILE__); LOG_NAME = SCRIPT_NAME.gsub('.rb','')
 
-  VERSION = "0.1.1"
+  VERSION = "0.1.2"
   # Parse command line options into the options hash
   options = {
     :logger => 'stderr',
@@ -396,7 +387,7 @@ if __FILE__ == $0 #needs to be removed if this script is distributed as part of 
 
   if options[:partition_class]
     log.info "Partitioning classes"
-    p = Partition.new(options[:cls_file], options[:name_file], options[:fasta_file])
+    p = Partition.new(options[:cls_file], options[:name_file], options[:fasta_file], log)
     p.partition
   elsif options[:rmcls]
     r = RemoveCls.new(options[:cls_file], options[:lrn_file])

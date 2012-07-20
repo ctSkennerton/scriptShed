@@ -115,7 +115,6 @@ if($ARGV{'-f'}) {
 }
 close $query;
 
-my @aux = undef;
 foreach my $database (@{$ARGV{'-d'}}) {
     my $dfh;
     if($ARGV{'-z'}) {
@@ -125,6 +124,8 @@ foreach my $database (@{$ARGV{'-d'}}) {
     }else {
        $dfh = IO::File->new($database, 'r') || die $!;
     }
+
+    my @aux = undef;
     while (my $seq = readfq($dfh, \@aux)) 
     {
         my $name2 = $seq->name;
