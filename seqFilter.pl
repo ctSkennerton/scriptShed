@@ -110,14 +110,14 @@ if( exists $ARGV{"-a"} | exists $ARGV{'-A'})
 {
     if ($seq_count > 1) {
         my $n50 = $total_base / ($seq_count / 2);
-        printf "\n\n%s sequences %s with an average length of %s and an n50 of %s\n\n", $seq_count,human_output($total_base), human_output($total_base / $seq_count), human_output($n50);
+        printf "%s sequences %s with an average length of %s and an n50 of %s\n", $seq_count,human_output($total_base), human_output($total_base / $seq_count), human_output($n50);
     } else {
-        printf "\n\n %s \n\n", human_output($total_base);
+        printf "%s\n", human_output($total_base);
     }
 }
 
 #close OUT;
-printAtEnd();
+unless(defined $ARGV{'--quiet'}){ printAtEnd();}
 exit;
 
 sub human_output {
@@ -547,6 +547,10 @@ Human readable output
 =item -A
 
 Print only the summary statistics (implies -a)
+
+=item --quiet
+
+suppress all un-needed information
 
 =back                      
 

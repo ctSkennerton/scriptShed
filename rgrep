@@ -113,6 +113,7 @@ function revcomp() {
         while read line
         do
             revcompl "$line"
+            REVCOMP_STRING="${REVCOMP_STRING}|"
         done < "$1"
     else
         revcompl "$1"

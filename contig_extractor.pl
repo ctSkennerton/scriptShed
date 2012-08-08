@@ -124,6 +124,10 @@ foreach my $database (@{$ARGV{'-d'}}) {
     }else {
        $dfh = IO::File->new($database, 'r') || die $!;
     }
+    # make a copy of the global hash
+    # so we can delete keys and make 
+    # things a bit faster
+    my %seqs2 = %seqs;
 
     my @aux = undef;
     while (my $seq = readfq($dfh, \@aux)) 
@@ -134,17 +138,20 @@ foreach my $database (@{$ARGV{'-d'}}) {
             my @p = split(/$ARGV{'-Rd'}->{separator_d}/, $seq->name);
             $name2 =  $p[$ARGV{'-Rd'}->{field_num_d}];
         }
-        if (exists $seqs{$name2})
+        if (exists $seqs2{$name2})
         {
             unless($ARGV{'-v'})
             {
                 print_seq(\$seq, $outfile);
+                delete $seqs2{$name2};
             }
         }
         elsif ($ARGV{'-v'})
         {
                 print_seq(\$seq, $outfile);
         }
+        # check to see if there are any keys left
+        last unless(scalar keys %seqs2);
     }
     $dfh->close();
 }
