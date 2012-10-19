@@ -3,6 +3,7 @@
 require 'bio'
 require 'optparse'
 require 'bio-logger'
+require 'subcommand'
 
 class App
   PROGRAM_NAME = "esomTools"
@@ -283,6 +284,7 @@ class Extractor
 end #Extractor
 
 if __FILE__ == $0 #needs to be removed if this script is distributed as part of a rubygem
+  include Subcommands
   SCRIPT_NAME = File.basename(__FILE__); LOG_NAME = SCRIPT_NAME.gsub('.rb','')
 
   VERSION = "0.1.1"
@@ -290,41 +292,63 @@ if __FILE__ == $0 #needs to be removed if this script is distributed as part of 
   options = {
     :logger => 'stderr',
   }
-  o = OptionParser.new do |opts|
-    opts.banner = " Usage: #{SCRIPT_NAME} <arguments>\n Description of what this program does...\n\n"
 
-    opts.on('-V', '--version', "Output version information")    { puts VERSION ; exit 0 }
-    opts.on('-P', '--partition', "Given a particular class list, will segregate all contigs from a class into separate fasta files") {options[:partition_class] = true }
-    opts.on('-R', '--remove', "Delete all the windows of a class from an lrn file") { options[:rmcls] = true }
-    opts.on('--remove-class [INT]', "An integer value for the class that needs to be removed" ) {|v| options[:rm_class] = v}
-    opts.on('-c', '--class-file [FILE]', "name of the class file") {|f| options[:cls_file] = f}
-    opts.on('-f', '--fasta-file [FILE]', "name of the fasta file") {|f| options[:fasta_file] = f }
-    opts.on('-n', '--name-file [FILE]', "name of the names file") {|f| options[:name_file] = f }
-    opts.on('-l', '--lrn-file [FILE]', "name of the lrn file") {|f| options[:lrn_file] = f}
+  global_options do |opts|
+    opts.banner = " Usage: #{SCRIPT_NAME} [options] <subcommand> <arguments>\n A number of utilities for working with ESOM\n\n"
     opts.on('-v', '--inverse', "inverse the previous operations") { options[:inverse] = true }
     # logger options
     opts.on("-q", "--quiet", "Run quietly, set logging to ERROR level [default INFO]") {Bio::Log::CLI.trace('error')}
     opts.on("--logger filename",String,"Log to file [default #{options[:logger]}]") { |name| options[:logger] = name}
     opts.on("--trace options",String,"Set log level [default INFO]. e.g. '--trace debug' to set logging level to DEBUG"){|s| Bio::Log::CLI.trace(s)}
+
   end
-  o.parse!
-  if ARGV.length != 0
-    $stderr.puts o
-    exit 1
+  add_help_option
+  command :partition do |opts|
+    opts.banner = "partition -c <file.cls> -f <file.fa> -n <file.names>"
+    opts.description = "Given a particular class list, will segregate all contigs from a class into separate fasta files"
+    opts.on('-c', '--class-file [FILE]', "name of the class file") {|f| options[:cls_file] = f}
+    opts.on('-n', '--name-file [FILE]', "name of the names file") {|f| options[:name_file] = f }
+    opts.on('-f', '--fasta-file [FILE]', "name of the fasta file") {|f| options[:fasta_file] = f }    
   end
-  # Setup logging. bio-logger defaults to STDERR not STDOUT, I disagree
-  Bio::Log::CLI.logger(options[:logger]); log = Bio::Log::LoggerPlus.new(LOG_NAME); Bio::Log::CLI.configure(LOG_NAME)
+
+  command :remove do |opts|
+    opts.banner = "remove -r <NUM> -c <file.cls> -l <file.lrn> "
+    opts.description = "Delete all the windows of a class from an lrn file"
+    opts.on('-r', '--remove-class NUM', "An integer value for the class that needs to be removed" ) {|v| options[:rm_class] = v.to_i}
+    opts.on('-l', '--lrn-file [FILE]', "name of the lrn file") {|f| options[:lrn_file] = f}
+    opts.on('-c', '--class-file [FILE]', "name of the class file") {|f| options[:cls_file] = f}
+  end
 
 
-  if options[:partition_class]
+  Bio::Log::CLI.logger(options[:logger])
+  log = Bio::Log::LoggerPlus.new(LOG_NAME)
+  Bio::Log::CLI.configure(LOG_NAME)
+  
+  cmd = opt_parse()
+  case cmd
+  when "partition"
     log.info "Partitioning classes"
-    p = Partition.new(options[:cls_file], options[:name_file], options[:fasta_file])
-    p.partition
-  elsif options[:rmcls]
-    r = RemoveCls.new(options[:cls_file], options[:lrn_file])
-    r.add_class(options[:rm_class])
-    r.read_cls
-    r.read_lrn
+    if options.has_key?(:cls_file) & options.has_key?(:name_file) & options.has_key?(:fasta_file)
+      p = Partition.new(options[:cls_file], options[:name_file], options[:fasta_file])
+      p.partition
+    else
+      log.error "please specify -c -n & -f on the command line"
+      exit 1; 
+    end
+  when "remove"
+    log.info "removing class"
+    if options.has_key?(:cls_file) & options.has_key?(:lrn_file) & options.has_key?(:rm_class)
+      r = RemoveCls.new(options[:cls_file], options[:lrn_file])
+      r.add_class(options[:rm_class])
+      r.read_cls
+      r.read_lrn
+    else
+      log.error "please specify -c & -l on the command line"
+      exit 1;
+    end
+  else
+    $stderr.puts "unknown command: #{cmd}"
+    exit 1
   end
   log.info "Done!"
 end #end if running as a script
