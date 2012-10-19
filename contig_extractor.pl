@@ -115,7 +115,6 @@ if($ARGV{'-f'}) {
 }
 close $query;
 
-my @aux = undef;
 foreach my $database (@{$ARGV{'-d'}}) {
     my $dfh;
     if($ARGV{'-z'}) {
@@ -125,6 +124,12 @@ foreach my $database (@{$ARGV{'-d'}}) {
     }else {
        $dfh = IO::File->new($database, 'r') || die $!;
     }
+    # make a copy of the global hash
+    # so we can delete keys and make 
+    # things a bit faster
+    my %seqs2 = %seqs;
+
+    my @aux = undef;
     while (my $seq = readfq($dfh, \@aux)) 
     {
         my $name2 = $seq->name;
@@ -133,17 +138,20 @@ foreach my $database (@{$ARGV{'-d'}}) {
             my @p = split(/$ARGV{'-Rd'}->{separator_d}/, $seq->name);
             $name2 =  $p[$ARGV{'-Rd'}->{field_num_d}];
         }
-        if (exists $seqs{$name2})
+        if (exists $seqs2{$name2})
         {
             unless($ARGV{'-v'})
             {
                 print_seq(\$seq, $outfile);
+                delete $seqs2{$name2};
             }
         }
         elsif ($ARGV{'-v'})
         {
                 print_seq(\$seq, $outfile);
         }
+        # check to see if there are any keys left
+        last unless(scalar keys %seqs2);
     }
     $dfh->close();
 }
@@ -151,7 +159,7 @@ foreach my $database (@{$ARGV{'-d'}}) {
 sub format_seq {
     my $seq = shift;
     if (defined ${$seq}->qual) {
-        return sprintf "@%s\n%s+\n%s\n", ${$seq}->name, ${$seq}->seq, ${$seq}->qual;
+        return sprintf "@%s%s\n%s+\n%s\n", ${$seq}->name, (defined ${$seq}->comment ^ defined $ARGV{'-C'}) ? ${$seq}->comment : '', ${$seq}->seq, ${$seq}->qual;
     } else {
         if (defined ${$seq}->comment ^ defined $ARGV{'-C'}) {
             return sprintf ">%s%s\n%s", ${$seq}->name, ${$seq}->comment, ${$seq}->seq;

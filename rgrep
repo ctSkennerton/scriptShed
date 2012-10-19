@@ -1,259 +1,301 @@
-#!/bin/bash
+#!/usr/bin/env perl
+###############################################################################
+#
+#    rgrep
+#    
+#    A reverse complementing grep
+#
+#    Copyright (C) 2012 Connor Skennerton
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+###############################################################################
 
-# overload grep so that the '-r' option will reverse
-# complement the sequence and grep for both form
-# This works cause GNU Grep has '-r' and '-R' for recurse
+#pragmas
+use strict;
+use warnings;
 
-GREP_OPTION_STRING=
-REVCOMP=0
-function usage() {
-echo "
-Regexp selection and interpretation:
-  -E     PATTERN is an extended regular expression
-  -F     PATTERN is a set of newline-separated strings
-  -G     PATTERN is a basic regular expression
-  -P     PATTERN is a Perl regular expression
-  -e     use PATTERN as a regular expression
-  -f     obtain PATTERN from FILE
-  -i     ignore case distinctions
-  -w     force PATTERN to match only whole words
-  -x     force PATTERN to match only whole lines
-  -z     a data line ends in 0 byte, not newline
-  -r     Reverse complement DNA sequences
+#core Perl modules
+use Getopt::Long qw(:config no_ignore_case bundling);
+use Pod::Usage;
+use File::Temp;
 
-Miscellaneous:
-  -s     suppress error messages
-  -v     select non-matching lines
-  -V     print version information and exit
+#CPAN modules
 
-Output control:
-  -m     stop after NUM matches
-  -b     print the byte offset with output lines
-  -n     print line number with output lines
-  -H     print the filename for each match
-  -h     suppress the prefixing filename on output
-  -o     show only the part of a line matching PATTERN
-  -q     suppress all normal output
-  -a     equivalent to --binary-files=text
-  -I     equivalent to --binary-files=without-match
-  -d     how to handle directories
-         ACTION is 'read', 'recurse', or 'skip'
-  -D     how to handle devices, FIFOs and sockets
-         ACTION is 'read' or 'skip'
-  -R     equivalent to --directories=recurse
-  -L     only print FILE names containing no match
-  -l     only print FILE names containing matches
-  -c     only print a count of matching lines per FILE
-  -Z     print 0 byte after FILE name
+#locally-written modules
 
-Context control:
-  -B     print NUM lines of leading context
-  -A     print NUM lines of trailing context
-  -C     print NUM lines of output context
-  -U     do not strip CR characters at EOL (MSDOS)
-  -u     report offsets as if CRs were not there (MSDOS)"
+BEGIN {
+    select(STDERR);
+    $| = 1;
+    select(STDOUT);
+    $| = 1;
 }
 
-REVCOMP_STRING=
+# get input params and print copyright
+my $global_options = checkParams();
 
-function revcompl() {
-    reversed=$(echo "$1" | rev)
-    i=0
-    while [ $i -lt ${#reversed} ]; do
-        case ${reversed:$i:1} in
-            T|U)
-                #echo -n "A"
-                REVCOMP_STRING="${REVCOMP_STRING}A"
-                ;;
-            A)
-                #echo -n "T"
-                REVCOMP_STRING="${REVCOMP_STRING}T"
-                ;;
-            G)
-                #echo -n "C"
-                REVCOMP_STRING="${REVCOMP_STRING}C"
-                ;;
-            C)
-                #echo -n "G"
-                REVCOMP_STRING="${REVCOMP_STRING}G"
-                ;;
-            N)
-                REVCOMP_STRING="${REVCOMP_STRING}N"
-                ;;
+######################################################################
+# CODE HERE
+######################################################################
+# unless the pattern file option is set then ARGV[0] is the regex
+my $regex;
+if (defined $global_options->{'reverse-complement'}) {
+    unless (defined $global_options->{"file"}) {
+        $regex = shift;
+        my $rev = revcomp($regex);
+        if (exists $global_options->{"extended-regexp"}) {
+            $regex.="|".$rev;
+        } else {
+            $regex .= "\\|".$rev;
+        }
+    } else {
+        $regex=undef;
+        # parse each line of the file and reverse complement it
+        # writing both lines to a tmp file
+        my ($ofh, $ofn) = File::Temp::tempfile();
+        open my $ifh, '<', $global_options->{'file'} || die $!;
+        while (<$ifh>) {
+            chomp;
+            my $r = revcomp($_);
+            print $ofh $_,"\n",$r,"\n";
+        }
+        $global_options->{'file'} = $ofn;
+    }
+} 
 
-            t|u)
-                REVCOMP_STRING="${REVCOMP_STRING}a"
-                ;;
-            a)
-                REVCOMP_STRING="${REVCOMP_STRING}t"
-                ;;
-            g)
-                REVCOMP_STRING="${REVCOMP_STRING}c"
-                ;;
-            c)
-                REVCOMP_STRING="${REVCOMP_STRING}g"
-                ;;
-            n)
-                REVCOMP_STRING="${REVCOMP_STRING}n"
-                ;;
+my $grep_option_string = generate_grep_option_string();
+my $cmd = "grep ";
+if (defined $grep_option_string) { $cmd.= $grep_option_string;} 
+if(defined $regex){
+    $cmd.= "$regex ";
+} 
+$cmd .=  join " ", @ARGV; 
+$cmd.= "\n";
+system($cmd);
+######################################################################
+# CUSTOM SUBS
+######################################################################
+sub generate_grep_option_string {
+    my $ret;
+    while(my($k,$v) = each %{$global_options}) {
+        if($v eq "1") {
+            $ret .= "--$k ";
+        } else {
 
-            *)
-                echo "The input does not appear to be a DNA sequence"
-                usage
-                exit 1
-                ;;
-        esac
-        let i=i+1
-    done
+            $ret .= "--$k $v ";
+        }
+    }
+    return $ret;
 }
 
-function revcomp() {
-    # check if its a file
-    if [ -e $1 ]; then
-        while read line
-        do
-            revcompl "$line"
-        done < "$1"
-    else
-        revcompl "$1"
-    fi
+sub revcomp {
+    my $r = scalar reverse shift;
+    $r =~ tr/ATCGatcg/TAGCtacg/;
+    return $r;
+}
+######################################################################
+# TEMPLATE SUBS
+######################################################################
+sub checkParams {
+    #-----
+    # Do any and all options checking here...
+    #
+    my @standard_options = ( "help|h+",
+    "basic-regexp|G+",
+    "extended-regexp|E+",
+    "fixed-regexp|F+",
+    "fixed-strings|F+",
+    "perl-regexp|P+",
+    "after-context|A=s",
+    "before-context|B=s",
+    "binary-files", 
+    "byte-offset|b+",
+    "context|C=s",
+    "color:s", 
+    "colour:s",
+    "count|c+",
+    "devices|D=s",
+    "directories|d=s",
+    "exclude=s",
+    "exclude-from=s",
+    "exclude-dir=s",
+    "file|f=s",
+    "files-with-matches|l+",
+    "files-without-match|L+",
+    "group-separator=s",
+    "include=s",
+    "ignore-case|i+",
+    "initial-tab|T+",
+    "label=s",
+    "line-buffered+",
+    "line-number|n+",
+    "line-regexp|x+",
+    "max-count|m=s",
+    "mmap+",
+    "no-filename|h+",
+    "no-group-separator+",
+    "no-messages|s+",
+    "null|Z+",
+    "null-data|z+",
+    "only-matching|o+",
+    "quiet|q+",
+    "reverse-complement|r+",
+    "recursive|R+",
+    "regexp|e=s",
+    "invert-match|v+",
+    "silent|q+",
+    "text|a+",
+    "binary|U+",
+    "unix-byte-offsets|u+",
+    "version|V+",
+    "with-filename|H+",
+    "word-regexp|w+");
+                                                                                                      
+    my %options;
+
+    # Add any other command line options, and the code to handle them
+    # 
+    GetOptions( \%options, @standard_options );
+
+    # if no arguments supplied print the usage and exit
+    #
+    #pod2usage() if (0 == (keys (%options) ));
+
+    # If the -help option is set, print the usage and exit
+    #
+    pod2usage() if $options{'help'};
+
+    # Compulsosy items
+    #if(!exists $options{''} ) { print "**ERROR: $0 : \n"; exec("pod2usage $0"); }
+
+    return \%options;
 }
 
-while getopts "EFGPe:f:iwxzSvVm:bnHhoqaId:D:RrLlcZB:A:C:Uu" opt; do
-    case $opt in
-        r)
-            REVCOMP=1
-            ;;
-         help)
-            usage
-            exit 0
-            ;;
-        E)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -E"
-            ;;
-        F)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -F"
-            ;;
-        G)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -G"
-            ;;
-        P)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -P"
-            ;;
-        e)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -e $OPTARG"
-            ;;
-        f)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -f $OPTARG"
-            ;;
-        i)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -i"
-            ;;
-        w)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -w"
-            ;;
-        x)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -x"
-            ;;
-        z)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -z"
-            ;;
-        S)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -S"
-            ;;
-        v)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -v"
-            ;;
-        V)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -V"
-            ;;
-        m)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -m $OPTARG"
-            ;;
-        b)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -b"
-            ;;
-        n)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -n"
-            ;;
-        H)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -H"
-            ;;
-        h)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -h"
-            ;;
-        o)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -o"
-            ;;
-        q)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -q"
-            ;;
-        a)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -a"
-            ;;
-        I)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -I"
-            ;;
-        d)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -d $OPTARG"
-            ;;
-        D)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -D $OPTARG"
-            ;;
-        R)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -R"
-            ;;
-        L)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -L"
-            ;;
-        l)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -l"
-            ;;
-        c)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -c"
-            ;;
-        B)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -B $OPTARG"
-            ;;
-        A)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -A $OPTARG"
-            ;;
-        C)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -C $OPTARG"
-            ;;
-        U)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -U"
-            ;;
-        u)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -u"
-            ;;
-        Z)
-            GREP_OPTION_STRING="$GREP_OPTION_STRING -Z"
-            ;;
+sub openWrite
+{
+    #-----
+    # Open a file for writing
+    #
+    my ($fn) = @_;
+    open my $fh, ">", $fn or die "**ERROR: could not open file: $fn for writing $!\n";
+    return $fh;
+}
 
-        \?)
-            echo "Invalid option: -$OPTARG" >&2
-            usage
-            exit 1
-            ;;
-        :)
-            echo "Option -$OPTARG requires an argument." >&2
-            usage
-            exit 1
-            ;;
-    esac
-done
-# remove the options from ARGV
-# the remainder will be the files
-shift $((OPTIND-1))
+sub openRead
+{   
+    #-----
+    # Open a file for reading
+    #
+    my ($fn) = @_;
+    open my $fh, "<", $fn or die "**ERROR: could not open file: $fn for reading $!\n";
+    return $fh;
+}
 
-# now the first option should be the DNA string
-DNA_STRING=$1
-shift
-if (( 1 == $REVCOMP)); then
-    revcomp "$DNA_STRING"
-    grep --color=auto ${GREP_OPTION_STRING} "$DNA_STRING|$REVCOMP_STRING" $@
-else
-    grep --color=auto ${GREP_OPTION_STRING} "$DNA_STRING" $@
-fi
+sub overrideDefault
+{
+    #-----
+    # Set and override default values for parameters
+    #
+    my ($default_value, $option_name) = @_;
+    if(exists $global_options->{$option_name}) 
+    {
+        return $global_options->{$option_name};
+    }
+    return $default_value;
+}
+
+__DATA__
+
+=head1 NAME
+
+rgrep
+
+=head1 COPYRIGHT
+
+copyright (C) 2012 Connor Skennerton
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+=head1 DESCRIPTION
+
+    rgrep is a perl wrapper around GNU grep that can automatically 
+    reverse complement a sequence of DNA given as a pattern or in
+    a file.  By default rgrep works exactly the same a grep, to get the
+    new features you need to specify the '-r' option.  Note that originally
+    both '-r' & '-R' meant recurse in GNU grep, however now only '-R' has
+    that functionality
+
+=head1 SYNOPSIS
+
+    rgrep [options] PATTERN [FILE...]
+    rgrep [options] [-e PATTERN | -f FILE] [FILE...]
+
+    Regexp selection and interpretation:
+      -E     PATTERN is an extended regular expression
+      -F     PATTERN is a set of newline-separated strings
+      -G     PATTERN is a basic regular expression
+      -P     PATTERN is a Perl regular expression
+      -e     use PATTERN as a regular expression
+      -f     obtain PATTERN from FILE
+      -i     ignore case distinctions
+      -w     force PATTERN to match only whole words
+      -x     force PATTERN to match only whole lines
+      -z     a data line ends in 0 byte, not newline
+      -r     Reverse complement DNA sequences
+
+    Miscellaneous:
+      -s     suppress error messages
+      -v     select non-matching lines
+      -V     print version information and exit
+
+    Output control:
+      -m     stop after NUM matches
+      -b     print the byte offset with output lines
+      -n     print line number with output lines
+      -H     print the filename for each match
+      -h     suppress the prefixing filename on output
+      -o     show only the part of a line matching PATTERN
+      -q     suppress all normal output
+      -a     equivalent to --binary-files=text
+      -I     equivalent to --binary-files=without-match
+      -d     how to handle directories
+             ACTION is 'read', 'recurse', or 'skip'
+      -D     how to handle devices, FIFOs and sockets
+             ACTION is 'read' or 'skip'
+      -R     equivalent to --directories=recurse
+      -L     only print FILE names containing no match
+      -l     only print FILE names containing matches
+      -c     only print a count of matching lines per FILE
+      -Z     print 0 byte after FILE name
+
+    Context control:
+      -B     print NUM lines of leading context
+      -A     print NUM lines of trailing context
+      -C     print NUM lines of output context
+      -U     do not strip CR characters at EOL (MSDOS)
+      -u     report offsets as if CRs were not there (MSDOS)
+
+=cut
 

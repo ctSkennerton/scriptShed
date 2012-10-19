@@ -30,8 +30,11 @@ use warnings;
 use Getopt::Long;
 use Pod::Usage;
 use IO::File;
+use IO::Zlib;
+use IO::Uncompress::Bunzip2;
 use Class::Struct Seq => {name => '$', seq => '$', comment => '$', qual => '$', direction => '$' };
 #CPAN modules
+use Bio::Tools::CodonTable;
 
 #locally-written modules
 
@@ -50,13 +53,71 @@ checkParams();
 # constants
 use constant {FORWARD => 0, REVERSE => 1};
 
+
 sub format_seq {
-    my $seq = shift;
+    my ($seq,$no_comments) = @_;
     if (defined ${$seq}->qual) {
-        return sprintf "@%s\n%s\n+\n%s\n", ${$seq}->name, ${$seq}->seq, ${$seq}->qual;
+        return sprintf "@%s%s\n%s+\n%s\n", ${$seq}->name, (defined ${$seq}->comment ^ defined $no_comments) ? ${$seq}->comment : '', ${$seq}->seq, ${$seq}->qual;
     } else {
-        return sprintf ">%s\n%s\n", ${$seq}->name, ${$seq}->seq;
+        return sprintf ">%s%s\n%s", ${$seq}->name, (defined ${$seq}->comment ^ defined $no_comments) ? ${$seq}->comment : '', ${$seq}->seq;
     }
+}
+
+sub fastaCut {
+    #-----
+    # Cut up a fasta sequence
+    #
+    my ($string, $prot, $line_wrap) = @_;
+    
+    # translate if need be
+    if(0 != $prot)
+    {
+        my $codon_table = Bio::Tools::CodonTable -> new ( -id => $prot );
+        $string = $codon_table->translate($string);
+    }
+    
+    # wrap the line if need be
+    if(0 != $line_wrap)
+    {
+        my $return_str = "";
+        my $len = length $string;
+        my $start = 0;
+        while($start < $len)
+        {
+            $return_str .= substr $string, $start, $line_wrap;
+            $return_str .="\n";
+            $start += $line_wrap;
+        }
+        return $return_str;
+    }
+    return "$string\n";
+}
+
+sub print_seq{
+    my ($seq_ref, $fh, $prot, $line_wrap, $no_comments) = @_;
+    
+    if(defined $line_wrap)
+    { 
+        if(defined $prot)
+        {
+            ${$seq_ref}->seq( fastaCut(${$seq_ref}->seq, $prot, $line_wrap) );
+        }
+        else
+        {
+            ${$seq_ref}->seq( fastaCut(${$seq_ref}->seq, 0, $line_wrap) );
+        }
+    }
+    elsif(defined $prot)
+    {
+         ${$seq_ref}->seq( fastaCut(${$seq_ref}->seq, $prot, 0) );
+    }
+    else
+    {
+        ${$seq_ref}->seq( ${$seq_ref}->seq."\n");
+    }
+
+    print $fh format_seq($seq_ref, $no_comments);
+
 }
 
 sub readfq {
@@ -76,7 +137,10 @@ sub readfq {
 			return;
 		}
 	}
-	my $name = /^.(\S+)/? $1 : '';
+    my $current_seq = Seq->new();
+	/^.(\S+)(.*)/;
+    $current_seq->name($1);
+    $current_seq->comment($2);
 	my $seq = '';
 	my $c;
 	$aux->[0] = undef;
@@ -88,35 +152,63 @@ sub readfq {
 	}
 	$aux->[0] = $_;
 	$aux->[1] = 1 if (!defined($aux->[0]));
-	return ($name, $seq) if ($c ne '+');
+    $current_seq->seq($seq);
+	return $current_seq if ($c ne '+');
 	my $qual = '';
 	while (<$fh>) {
 		chomp;
 		$qual .= $_;
 		if (length($qual) >= length($seq)) {
 			$aux->[0] = undef;
-			return ($name, $seq, $qual);
+            $current_seq->qual($qual);
+			return $current_seq;
 		}
 	}
 	$aux->[1] = 1;
-	return ($name, $seq);
+	return $current_seq;
+}
+
+sub guess_read_direction {
+    my $seq_ref = shift;
+    if(${$seq_ref}->name =~ /(.*)\.(f|r)$/) {
+        ${$seq_ref}->direction(($2 eq 'f') ? FORWARD : REVERSE);
+    } elsif (${$seq_ref}->name =~ /(.*)\/(\d).*/) {
+        ${$seq_ref}->direction(($2 == 1) ? FORWARD : REVERSE);
+    } elsif ( ${$seq_ref}->comment =~ /([12]):\w:\d:\w+/) {
+        ${$seq_ref}->direction( ($1 == 1) ? FORWARD : REVERSE);
+    } 
+}
+
+# newbler (.f or .r), illumina 1.3 (\1 or \2), illumina 1.8 - space separated
+sub determine_pairing_convention {
+    my $seq_ref = shift;
+    if(${$seq_ref}->name =~ /(.*)\.([fr])$/) {
+        ${$seq_ref}->direction(($2 eq 'f') ? FORWARD : REVERSE);
+        return ($1, 'newbler', ($2 eq 'f') ? FORWARD : REVERSE);
+    } elsif (${$seq_ref}->name =~ /(.*)\/(\d).*/) {
+        ${$seq_ref}->direction(($2 == 1) ? FORWARD : REVERSE);
+        return ($1, 'ill13', ($2 eq '1') ? FORWARD : REVERSE);
+    } elsif ( ${$seq_ref}->comment =~ /([12]):\w:\d:\w+/) {
+        ${$seq_ref}->direction( ($1 == 1) ? FORWARD : REVERSE);
+        return (${$seq_ref}->name, 'ill18', ($1 == 1) ? FORWARD : REVERSE);
+    } 
 }
 
 sub seg_help {
-print "pair segregate [-help|h] [-in|i] [-paired|p] [-single|s] [-n|newbler]
+    print "pair segregate [-help|h] [-in|i FILE] { [-paired|p FILE] [-1 FILE] [-2 FILE] } [-single|s FILE] 
 
       [-help -h]                   Displays basic usage information
       [-in|i]                      Input file [stdin]
       [-paired|p]                  Output for reads with pairs [stdout]
-      [-single|s]                  Output for reads without pairs [stderr]
-      [-newbler|n]                 Read names use the newbler format by appending
-                                   '.f' or '.r' to the end\n"
+      [-1]                         Output file for the first read in the pair [stdout]
+      [-2]                         Output file for the second read in the pair [stdout]
+      [-single|s]                  Output for reads without pairs [stderr] \n"
 
 }
 
 sub seg_main {
     #my $ARGV = shift;
-    my @seg_options = ("help|h+", "1:s", "2:s", "paired|p:s","in|i:s", "single|s:s", "newbler|n+");
+    my @seg_options = ("help|h+", "1:s", "2:s", "paired|p:s","in|i:s", "single|s:s" );
     my %options;
 
     # since I've shifted ARGV earlier the global will
@@ -164,24 +256,11 @@ sub seg_main {
     }
 
     my @aux = undef;
-    my ($name, $seq, $qual);
     my %pairs_hash;
     # go through the input file and take note of which is the first and second read
-    while (($name, $seq, $qual) = readfq($in_fh, \@aux)) {
-        my $current_seq = Seq->new(name => $name,
-                                   seq => $seq,
-                                   comment => undef,
-                                   qual => $qual
-                                  );
-        if($options{'newbler'}) {
-            if($current_seq->name =~ /(.*)\.(f|r)$/) {
-                $current_seq->direction(($2 eq 'f') ? FORWARD : REVERSE);
-                push @{$pairs_hash{$1}}, \$current_seq;
-            }
-        } elsif ($name =~ /(.*)\/(\d).*/) {
-            $current_seq->direction(($2 == 1) ? FORWARD : REVERSE);
-            push @{$pairs_hash{$1}}, \$current_seq;
-        }
+    while (my $current_seq  = readfq($in_fh, \@aux)) {
+        my ($name, $type, $direction) = determine_pairing_convention(\$current_seq);
+        push @{$pairs_hash{$name}}, \$current_seq;
     }
     close $in_fh;
 
@@ -189,48 +268,31 @@ sub seg_main {
     while(my($k,$v) = each %pairs_hash) {
         if(scalar @{$v} > 1) {
             foreach my $e (sort {${$a}->direction <=> ${$b}->direction} @{$v}) {
-                (${$e}->direction == FORWARD) ? $one_fh->print( format_seq($e)) : $two_fh->print(format_seq($e));
+                (${$e}->direction == FORWARD) ? print_seq($e, $one_fh, undef,undef,undef) : print_seq($e, $two_fh,undef,undef,undef);
             }
         } else {
-            $single_fh->print( format_seq($v->[0]) );
+            print_seq($v->[0], $single_fh,undef,undef,undef);
         }
     }
 }
 
 sub match_help {
-    print "pair match [-help|h] [-in|i] -1 FILE -2 FILE [-out|o]
+    print "pair match [-help|h] [-in|i FILE] [-1 FILE] [-2 FILE] [-gzip|z] [-bzip2|j] [-append|a] -d1 FILE -d2 FILE
 
       [-help|h]                    Displays basic usage information
       [-in|i]                      Input file [stdin]
-       -1 FILE                     Database for first member of pair
-       -2 FILE                     Database for second member of pair
-      [-out|o]                     Output file [stdout]\n";
+      [-1 FILE]                    Output for the first member of the pair [stdout]
+      [-2 FILE]                    Output for the second member of the pair [stdout]
+      [-gzip|z]                    The database files are gzipped
+      [-bzip2|j]                   The database files are bzipped
+      [-append|a]                  Append onto, rather than overwrite the files given with -1 -2
+      -d1 FILE                     Database for the first member of the pair
+      -d2 FILE                     Database for the second member of the pair\n";
 }
 
-sub match_print_seq {
-    # pass in the seq and the mate
-    # the mate is considered the second read
-    my ($seq,$mate,$fh) = @_;
-    # I'm assuming here that both the pairs are in the same format
-    if(defined $seq->[1]) {
-        printf($fh "\@%s\n%s\n+\n%s\n\@%s\n%s\n+\n%s\n", 
-            $seq->[2], 
-            $seq->[0], 
-            $seq->[1],
-            $mate->[2], 
-            $mate->[0], 
-            $mate->[1]);
-    } else {
-        printf($fh ">%s\n%s\n>%s\n%s\n", 
-            $seq->[2], 
-            $seq->[0], 
-            $mate->[2], 
-            $mate->[0]);
-    }
-}
 sub match_main {
 
-    my @match_options = ( "help|h+", "in|i:s", "1:s", "2:s", "3:s", "out|o:s" );
+    my @match_options = ( "help|h+", "in|i:s", "gzip|z+","bzip2|j+","d1:s", "d2:s", "1:s", "2:s", "append|a+" );
     my %options;
 
     # since I've shifted ARGV earlier the global will
@@ -239,67 +301,126 @@ sub match_main {
 
     if($options{'help'} || scalar keys %options == 0) { &match_help; exit;}
 
-    my $in_fh; # = \*STDIN;
-    if(defined $options{'in'}) {
-        open $in_fh, '<', $options{'in'} or die $!;
-    } else {
-        $in_fh = \*STDIN;
-    }
-    my $out_fh;
-    if(defined $options{'out'}) {
-        open $out_fh, '>', $options{'out'} or die $!;
-    } else {
-        $out_fh = \*STDOUT;
-    }
+    my $in_fh = (defined $options{'in'}) ? openRead($options{'in'}) : \*STDIN; # = \*STDIN;
+    #my $out_fh = (defined $options{'out'}) ? openWrite($options{'out'}) : \*STDOUT;
 
-    my ($one_fh, $two_fh, $three_fh);
-    if(defined $options{'3'}) {
-        $three_fh = &openRead($options{'3'});
-    } else {
-        $one_fh = &openRead($options{'1'});
-        $two_fh = &openRead($options{'2'});
-    }
+
+    my $one_fh = \*STDOUT;
+    my $two_fh = \*STDOUT;
+    my $d_one_fh;
+    my $d_two_fh;
+    if (defined $options{'d1'}) {
+        $d_one_fh = openRead($options{'d1'}, $options{'gzip'}, $options{'bzip2'})# IO::File->new($options{'1'}, (defined $options{'append'}) ? 'a' : 'w') || die $!;
+    } 
+
+    if (defined $options{'d2'}) {
+        $d_two_fh = openRead($options{'d2'}, $options{'gzip'}, $options{'bzip2'}) #IO::File->new($options{'2'},(defined $options{'append'}) ? 'a' : 'w') || die $!;
+    } 
+    if (defined $options{'1'}) {
+        $one_fh = openWrite($options{'1'}, $options{'append'});
+    } 
+    if (defined $options{'2'}) {
+        if($options{'2'} eq $options{'1'}) {
+            $two_fh = $one_fh;
+        } else  {
+            $two_fh = openWrite($options{'2'}, $options{'append'});
+        }
+    } 
 
     #create two separate lists one for the first and second pair members
     my @aux = undef;
-    my ($name, $seq, $qual);
     
     my %one_hash;
     my %two_hash;
     # go through the input file and take note of which is the first and second read
-    while (($name, $seq, $qual) = readfq($in_fh, \@aux)) {
+    while (my $current_seq = readfq($in_fh, \@aux)) {
         # remove the trailing segment ID
-        if($name =~ /(.*)\/(\d).*/) {
-            if($2 == 1) {
-                $one_hash{$1.'/2'} = [$seq, $qual, $name];
-            } else {
-                $two_hash{$1.'/1'} = [$seq, $qual, $name];
+        my ($name, $type, $direction) = determine_pairing_convention(\$current_seq);
+        if($direction == FORWARD) {
+            if($type eq 'ill13') {
+                $name .= '/2';
+            } elsif($type eq 'newbler') {
+                $name .= '.r';
             }
+            $one_hash{$name} = \$current_seq;
+        } else {
+            if($type eq 'ill13') {
+                $name .= '/1';
+            } elsif($type eq 'newbler') {
+                $name .= '.f';
+            }
+            $two_hash{$name} = \$current_seq;
         }
     }
     close $in_fh;
     # now go through each of the database files looking for
     # the corresponding mates
     @aux = undef;
-    while (($name, $seq, $qual) = readfq($one_fh, \@aux)) {
-        if(defined $two_hash{$name}) {
-            my @tmp_array = ($seq,$qual,$name);
-            &match_print_seq(\@tmp_array, $two_hash{$name}, $out_fh );
+    while (my $current_seq = readfq($d_one_fh, \@aux)) {
+        if(defined $two_hash{$current_seq->name}) {
+            print_seq(\$current_seq, $one_fh, undef, undef,undef);
+            print_seq($two_hash{$current_seq->name}, $two_fh, undef, undef,undef);
         }
     }
     # and now for the other file
     @aux = undef;
-    while (($name, $seq, $qual) = readfq($two_fh, \@aux)) {
-        if(defined $one_hash{$name}) {
-            my @tmp_array = ($seq,$qual,$name);
-            &match_print_seq( $one_hash{$name}, \@tmp_array, $out_fh );
+    while (my$current_seq = readfq($d_two_fh, \@aux)) {
+        if(defined $one_hash{$current_seq->name}) {
+            print_seq($one_hash{$current_seq->name}, $one_fh, undef, undef,undef);
+            print_seq(\$current_seq, $two_fh, undef, undef,undef);
         }
     }
+}
 
+sub unshuffle_help {
+    print "pair unshuffle [-help|h] [-in|i] [-1 FILE] [-2 FILE] 
 
-
+      [-help|h]                    Displays basic usage information
+      [-in|i FILE]                 Input file [stdin]
+      [-1 FILE]                    Output for first member of pair [stdout]
+      [-2 FILE]                    Output for second member of pair [stderr]\n";
 
 }
+
+sub unshuffle_main {
+
+    my @unshuffle_options = ( "help|h+", "in|i:s", "1:s", "2:s" );
+    my %options;
+
+    # since I've shifted ARGV earlier the global will
+    # be right for what I want to do
+    GetOptions( \%options, @unshuffle_options );
+
+    if($options{'help'} || scalar keys %options == 0) { &unshuffle_help; exit;}
+
+    my $in_fh = (defined $options{'in'}) ? openRead($options{'in'}, undef, undef) : \*STDIN; # = \*STDIN;
+
+
+    my $one_fh = \*STDOUT;
+    my $two_fh = \*STDERR;
+
+    if (defined $options{'1'}) {
+        $one_fh = openWrite($options{'1'}, $options{'append'});
+    } 
+
+    if (defined $options{'2'}) {
+        $two_fh = openWrite($options{'2'}, $options{'append'});
+    } 
+
+    my @aux = undef;
+    
+    my $read_counter = 1;
+    while (my $current_seq = readfq($in_fh, \@aux)) {
+        if($read_counter & 1) {
+            print_seq(\$current_seq, $one_fh, undef, undef,undef)
+        } else {
+            print_seq(\$current_seq, $two_fh, undef, undef,undef)
+        }
+        $read_counter++;
+    }
+}
+
+
 sub checkParams {
     #-----
     # Do any and all options checking here...
@@ -308,10 +429,15 @@ sub checkParams {
     
     # figure out subcommands
     my $arg = shift @ARGV;
-    if ($arg eq "segregate") {
+    if(! defined $arg) {
+        pod2usage();
+        exit;
+    } elsif ($arg eq "segregate") {
         &seg_main;   
     } elsif ($arg eq "match") {
         &match_main; 
+    } elsif ($arg eq "unshuffle") {
+        &unshuffle_main;
     } else {
         pod2usage();
     }
@@ -337,8 +463,8 @@ sub openWrite
     #-----
     # Open a file for writing
     #
-    my ($fn) = @_;
-    open my $fh, ">", $fn or die "**ERROR: could not open file: $fn for writing $!\n";
+    my ($fn,$append) = @_;
+    my $fh = IO::File->new($fn,(defined $append) ? 'a' : 'w') || die "**ERROR: could not open file: $fn for writing $!\n";
     return $fh;
 }
 
@@ -347,8 +473,15 @@ sub openRead
     #-----
     # Open a file for reading
     #
-    my ($fn) = @_;
-    open my $fh, "<", $fn or die "**ERROR: could not open file: $fn for reading $!\n";
+    my ($fn, $gzip, $bzip) = @_;
+    my $fh;
+    if(defined $gzip) {
+        $fh = IO::Zlib->new($fn,"rb") || die $!;
+    } elsif(defined $bzip){
+        $fh = IO::Uncompress::Bunzip2->new($fn) || die $!;
+    } else {
+       $fh = IO::File->new($fn, 'r') || die $!;
+    }
     return $fh;
 }
 
@@ -399,6 +532,7 @@ __DATA__
     Commands:
         segregate       Given a single stream of reads, segregate into two streams of paired and unpaired reads
         match           Given an input stream of reads and two database files, get the other member of the pair
+        unshuffle       Given an input file of paired reads that are interleaved, separate each member of the pair into a separate file
 
 =cut
 

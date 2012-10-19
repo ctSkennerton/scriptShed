@@ -127,9 +127,10 @@ end
 # Now go though the sequences file and cut ~15bp from either side of the spacers for each CRISPR
 Bio::FlatFile.open(Bio::FastaFormat, options[:sequences]) do |ff|
   ff.each do |record|
-    if targets.has_key?(record.definition)
-      targets[record.definition].each do |spacer|
-        spacer.find_all{|i| i.genome == record.definition}.each do |protospacer|
+    seq_name = record.definition.gsub(/(\w+)\s.*/,'\1')
+    if targets.has_key?(seq_name)
+      targets[seq_name].each do |spacer|
+        spacer.find_all{|i| i.genome == seq_name}.each do |protospacer|
           rstart = nil
           rend = nil
           lstart = nil
@@ -154,9 +155,13 @@ Bio::FlatFile.open(Bio::FastaFormat, options[:sequences]) do |ff|
           end
           if lstart > 0 
             protospacer.left_flank = sequence.subseq(lstart, lend)
+          else 
+            log.warn "Cannot cut left flank of G#{spacer.gid}SP#{spacer.spid} goes past beginning of sequence"
           end
           if rend <= record.seq.length
             protospacer.right_flank = sequence.subseq(rstart, rend)
+          else
+            log.warn "Cannot cut right flank of G#{spacer.gid}SP#{spacer.spid} goes past end of sequence"
           end
           protospacer.sequence = sequence.subseq(lend + 1,rstart - 1)
           #puts "#{record.seq.subseq(lstart,rend)}"
