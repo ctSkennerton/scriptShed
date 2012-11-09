@@ -473,25 +473,25 @@ Wrap the lines at wrap-length chars
 
 =item -p [<protein_code>]
 
-Enter a code if you wish to convert to protein
-Specify a number from the following list (Uses: Bio::Tools::CodonTable)
-1 Standard
-2 Vertebrate Mitochondrial
-3 Yeast Mitochondrial
-4 Mold, Protozoan,_and_CoelenterateMitochondrial_and_Mycoplasma/Spiroplasma
-5 Invertebrate Mitochondrial
-6 Ciliate, Dasycladacean_and_Hexamita_Nuclear
-9 Echinoderm Mitochondrial
-10 Euplotid Nuclear
-11 Bacterial
-12 Alternative Yeast_Nuclear
-13 Ascidian Mitochondrial
-14 Flatworm Mitochondrial
-15 Blepharisma Nuclear
-16 Chlorophycean Mitochondrial
-21 Trematode Mitochondrial
-22 Scenedesmus obliquus_Mitochondrial
-23 Thraustochytrium Mitochondrial
+    Enter a code if you wish to convert to protein
+    Specify a number from the following list (Uses: Bio::Tools::CodonTable)
+    1 Standard
+    2 Vertebrate Mitochondrial
+    3 Yeast Mitochondrial
+    4 Mold, Protozoan,_and_CoelenterateMitochondrial_and_Mycoplasma/Spiroplasma
+    5 Invertebrate Mitochondrial
+    6 Ciliate, Dasycladacean_and_Hexamita_Nuclear
+    9 Echinoderm Mitochondrial
+    10 Euplotid Nuclear
+    11 Bacterial
+    12 Alternative Yeast_Nuclear
+    13 Ascidian Mitochondrial
+    14 Flatworm Mitochondrial
+    15 Blepharisma Nuclear
+    16 Chlorophycean Mitochondrial
+    21 Trematode Mitochondrial
+    22 Scenedesmus obliquus_Mitochondrial
+    23 Thraustochytrium Mitochondrial
 
 Default: no conversion
 

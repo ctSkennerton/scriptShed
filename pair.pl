@@ -191,7 +191,11 @@ sub determine_pairing_convention {
     } elsif ( ${$seq_ref}->comment =~ /([12]):\w:\d:\w+/) {
         ${$seq_ref}->direction( ($1 == 1) ? FORWARD : REVERSE);
         return (${$seq_ref}->name, 'ill18', ($1 == 1) ? FORWARD : REVERSE);
-    } 
+    } else {
+        ${$seq_ref}->direction(FORWARD);
+        return (${$seq_ref}->name, 'unk', FORWARD);
+    }
+
 }
 
 sub seg_help {
