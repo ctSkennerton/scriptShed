@@ -248,10 +248,11 @@ class Partition
   # take a contig window name and 
   # convert it back to its original form
   def fix_contig_name(name)
-    name.gsub!(/_leftover.*/,'')
-    if name =~ /(.*)_\d+/
+    if nil != name.gsub!(/_leftover.*/,'')
+      return name
+    elsif name =~ /(.*)_\d+/
       return $1
-    else
+    else 
       return name
     end
   end
@@ -354,7 +355,7 @@ end #Extractor
 if __FILE__ == $0 #needs to be removed if this script is distributed as part of a rubygem
   SCRIPT_NAME = File.basename(__FILE__); LOG_NAME = SCRIPT_NAME.gsub('.rb','')
 
-  VERSION = "0.1.2"
+  VERSION = "0.1.3"
   # Parse command line options into the options hash
   options = {
     :logger => 'stderr',
