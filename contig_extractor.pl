@@ -2,7 +2,7 @@
 ###############################################################################
 #
 #
-#    Copyright (C) 2010, 2011, 2012 Connor Skennerton
+#    Copyright (C) 2010-2013 Connor Skennerton
 #
 #    Support added for the Manotator by Mike Feb 2012
 #
@@ -47,9 +47,6 @@ BEGIN
 
 # get input params and print copyright
 
-#my $options = checkParams();
-
-
 my $query = \*STDIN;
 if (defined $ARGV{'-i'}) {
     open($query, $ARGV{'-i'}) or die;
@@ -60,6 +57,7 @@ if (defined $ARGV{'-o'}) {
 }
 
 my %seqs;
+my %cluster_map;
 #printAtStart();
 
 if($ARGV{'-f'}) {
@@ -73,34 +71,38 @@ if($ARGV{'-f'}) {
         $seqs{$seq->name} = 1;
     }
 } elsif (! defined $ARGV{'-n'}) {
-    while (my $line = <$query>) 
-    {
-        my $name = undef;
-        chomp $line;
-        if($ARGV{'-l'}) {
-            $name = &list($line);
-        } elsif ($ARGV{'-b'}) {
-           $name = &blast($line);
-        } elsif ($ARGV{'-s'}) {
-            # skip header lines
-            next if $line =~ /^@/;
-            $name =&sam($line);
-        } elsif ($ARGV{'-m'}) {
-            $name =&mannotator("UniRef90_".$line);
-        } else {
-            next if ($line =~ /^\#/);
-            last if ($line =~ /\#+FASTA/i);
-            $name =&gff($line);
-        }
-        unless(defined $name ) {
-            die "Crazy error!\n";
-        } else {
-            if($ARGV{'-Ri'}) {
-                # perform the split according to the user
-                my @p = split(/$ARGV{'-Ri'}->{separator}/, $name);
-                $name = $p[$ARGV{'-Ri'}->{field_num}];
+    if (defined $ARGV{'-c'}){
+        &mapping($ARGV{'-c'}, \%seqs);
+    } else {
+        while (my $line = <$query>) 
+        {
+            my $name = undef;
+            chomp $line;
+            if($ARGV{'-l'}) {
+                $name = &list($line);
+            } elsif ($ARGV{'-b'}) {
+                $name = &blast($line);
+            } elsif ($ARGV{'-s'}) {
+                # skip header lines
+                next if $line =~ /^@/;
+                $name =&sam($line);
+            } elsif ($ARGV{'-m'}) {
+                $name =&mannotator("UniRef90_".$line);
+            } else {
+                next if ($line =~ /^\#/);
+                last if ($line =~ /\#+FASTA/i);
+                $name =&gff($line);
             }
-            $seqs{$name} = 1;
+            unless(defined $name ) {
+                die "Crazy error!\n";
+            } else {
+                if($ARGV{'-Ri'}) {
+                    # perform the split according to the user
+                    my @p = split(/$ARGV{'-Ri'}->{separator}/, $name);
+                    $name = $p[$ARGV{'-Ri'}->{field_num}];
+                }
+                $seqs{$name} = 1;
+            }
         }
     }
 } else {
@@ -142,18 +144,26 @@ foreach my $database (@{$ARGV{'-d'}}) {
         {
             unless($ARGV{'-v'})
             {
+                if (defined $ARGV{'-c'}) {
+                    $outfile = $seqs2{$name2};
+                }
                 print_seq(\$seq, $outfile);
                 delete $seqs2{$name2};
             }
         }
         elsif ($ARGV{'-v'})
         {
-                print_seq(\$seq, $outfile);
+            print_seq(\$seq, $outfile);
         }
         # check to see if there are any keys left
         last unless(scalar keys %seqs2);
     }
     $dfh->close();
+}
+if (defined $ARGV{'-c'}) {
+    while (my ($seq,$fh) = each %seqs) {
+        close $fh;
+    }
 }
 
 sub format_seq {
@@ -334,6 +344,31 @@ sub mannotator{
     return $columns[0];
 }
 
+sub mapping {
+    my ($mapfile, $seqs) = @_;
+    my $fh = IO::File->new($mapfile, 'r') || die $!;
+    my %seen_file;
+    my $fh_count = 0;
+    while(<$fh>) {
+        chomp;
+        my @mapping = split /\t/;
+        if (exists $seen_file{$mapping[1]}) {
+            $seqs->{$mapping[0]} = $seen_file{$mapping[1]}
+        } else {
+            $fh_count++;
+            if ($fh_count > 255) {
+                warn "there are more than 255 different groupings specified in the mappings file\n";
+                warn "please split the mapping file such that there are less groupings then run\n";
+                warn "contig_extractor using the split mapping files\n";
+                exit 1;
+            }
+            my $new_fh = IO::File->new($mapping[1],'w') || die $!;
+            $seen_file{$mapping[1]} = $new_fh;
+            $seqs->{$mapping[0]} = $new_fh;
+        }
+    }
+}
+
 
 __END__
 
@@ -343,7 +378,7 @@ __END__
 
 =head1 COPYRIGHT
 
- copyright (C) 2010, 2011, 2012 Connor Skennerton
+ copyright (C) 2010-2013 Connor Skennerton
 
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -429,6 +464,19 @@ Used only when the input is in blast format; sets the subject as the list of ide
 
 A list of sequence names to extract in the form of a space separated list
 
+=item -c <mapping_file>
+
+    File containing a mapping of contigs and their groupings.  Each line must contain a single contig name
+    and the name of an output file for that contig that is TAB sepatated. 
+    Example:
+    contig0001	cluster_1.fa
+    contig0002	cluster_2.fa
+    NOTE: You cannot specify more than 255 different output file names. If you have more groupings than this
+    you will need to split your job into parts 
+
+=for Euclid
+    mapping_file.type: readable
+
 =item -v
 
 Invert the match. ie extract non-matching reads
@@ -506,7 +554,7 @@ Do not print comments in fasta files
 
 =head1 VERSION
 
- 0.5.3
+ 0.5.4
 
 =head1 DESCRIPTION
 
