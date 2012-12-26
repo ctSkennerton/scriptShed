@@ -73,7 +73,7 @@ if (defined $global_options->{'reverse-complement'}) {
         $global_options->{'file'} = $ofn;
     }
 } 
-
+delete $global_options->{'reverse-complement'};
 my $grep_option_string = generate_grep_option_string();
 my $cmd = "grep ";
 if (defined $grep_option_string) { $cmd.= $grep_option_string;} 
