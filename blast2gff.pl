@@ -102,7 +102,6 @@ $type      = 'query';
 $gffver    = 2;
 $methodtag = "similarity";
 $addtarget = 1;
-
 GetOptions(
 	   'i|input:s'  => \$input,
 	   'component'  => \$comp,
@@ -141,10 +140,17 @@ $locfunc = defined($locfunc) ? parse_code($locfunc) : sub { shift->location };
 $addid = undef if $addid && $match;
 
 # if no input is provided STDIN will be used
-my $parser = new Bio::SearchIO(-format => $format,
+my $parser;
+if (defined $input){
+$parser = new Bio::SearchIO(-format => $format,
 			       -verbose => $quiet ? -1 : 0,
 			       -file   => $input);
+           } else {
 
+$parser = new Bio::SearchIO(-format => $format,
+			       -verbose => $quiet ? -1 : 0,
+                   -fh => \*STDIN);
+       }
 my $out;
 if( defined $output ) {
     $out = new Bio::Tools::GFF(-gff_version => $gffver,

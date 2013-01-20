@@ -248,9 +248,9 @@ class Partition
   # take a contig window name and 
   # convert it back to its original form
   def fix_contig_name(name)
-    if nil != name.gsub!(/_leftover.*/,'')
+    if nil != name.gsub!(/_leftover.*$/,'')
       return name
-    elsif name =~ /(.*)_\d+/
+    elsif name =~ /(.*)_\d+$/
       return $1
     else 
       return name

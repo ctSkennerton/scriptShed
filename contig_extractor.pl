@@ -45,8 +45,6 @@ BEGIN
     $| = 1;
 	}
 
-# get input params and print copyright
-
 my $query = \*STDIN;
 if (defined $ARGV{'-i'}) {
     open($query, $ARGV{'-i'}) or die;
@@ -93,13 +91,13 @@ if($ARGV{'-f'}) {
                 last if ($line =~ /\#+FASTA/i);
                 $name =&gff($line);
             }
-            unless(defined $name ) {
+            if(! defined $name ) {
                 die "Crazy error!\n";
             } else {
                 if($ARGV{'-Ri'}) {
-                    # perform the split according to the user
-                    my @p = split(/$ARGV{'-Ri'}->{separator}/, $name);
-                    $name = $p[$ARGV{'-Ri'}->{field_num}];
+                    if ($name =~ /$ARGV{'-Ri'}/) {
+                        $name =  $1;
+                    }
                 }
                 $seqs{$name} = 1;
             }
@@ -116,8 +114,11 @@ if($ARGV{'-f'}) {
     }
 }
 close $query;
-
+my $keys_to_find = scalar keys %seqs;
 foreach my $database (@{$ARGV{'-d'}}) {
+    # check to see if there are any keys left
+    last unless($keys_to_find > 0);
+    
     my $dfh;
     if($ARGV{'-z'}) {
         $dfh = IO::Zlib->new($database,"rb") || die $!;
@@ -126,10 +127,6 @@ foreach my $database (@{$ARGV{'-d'}}) {
     }else {
        $dfh = IO::File->new($database, 'r') || die $!;
     }
-    # make a copy of the global hash
-    # so we can delete keys and make 
-    # things a bit faster
-    my %seqs2 = %seqs;
 
     my @aux = undef;
     while (my $seq = readfq($dfh, \@aux)) 
@@ -137,18 +134,19 @@ foreach my $database (@{$ARGV{'-d'}}) {
         my $name2 = $seq->name;
         if($ARGV{'-Rd'}) {
             # perform the split according to the user
-            my @p = split(/$ARGV{'-Rd'}->{separator_d}/, $seq->name);
-            $name2 =  $p[$ARGV{'-Rd'}->{field_num_d}];
+            if ($seq->name =~ /$ARGV{'-Rd'}/) {
+                $name2 =  $1;
+            }
         }
-        if (exists $seqs2{$name2})
+        if (exists $seqs{$name2})
         {
             unless($ARGV{'-v'})
             {
                 if (defined $ARGV{'-c'}) {
-                    $outfile = $seqs2{$name2};
+                    $outfile = $seqs{$name2};
                 }
                 print_seq(\$seq, $outfile);
-                delete $seqs2{$name2};
+                $keys_to_find--;
             }
         }
         elsif ($ARGV{'-v'})
@@ -156,7 +154,7 @@ foreach my $database (@{$ARGV{'-d'}}) {
             print_seq(\$seq, $outfile);
         }
         # check to see if there are any keys left
-        last unless(scalar keys %seqs2);
+        last unless($keys_to_find > 0);
     }
     $dfh->close();
 }
@@ -412,6 +410,10 @@ file of reads where a subset needs to be extracted (can be FASTA or FASTQ, autom
 
 =over
 
+=item -h
+
+print a short help msg
+
 =item -i <input_file>
 
 File containing sequences or identifiers to be extracted from the sequence database
@@ -496,21 +498,12 @@ Force output to be in fasta format
 =item -Ri <separator> <field_num>
 
 The header in the input file contains additional information that must be removed.
-This option takes two arguements, a separator, that can be any valid perl regular expression
-to split the input identifier and the field to be used as the key for extraction (zero indexed).
+Specify a perl regular expression such that $1 (first capture group) contains the required information.
 
-=for Euclid
-    field_num.type: i
-    field_num.type.error: "Please specify an integer for the field_num"
-
-=item -Rd <separator_d> <field_num_d>
+=item -Rd <database_regex>
 
 The header in the database file contains additional information that can be removed.
-Specify the options the same as option -Ri above
-
-=for Euclid
-    field_num_d.type: i
-    field_num_d.type.error: "Please specify an integer for the field number"
+Specify a perl regular expression such that $1 (first capture group) contains the required information.
 
 =item -w [<wrap_length>]
 
@@ -554,7 +547,7 @@ Do not print comments in fasta files
 
 =head1 VERSION
 
- 0.5.4
+ 0.5.5
 
 =head1 DESCRIPTION
 
