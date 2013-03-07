@@ -292,7 +292,6 @@ class Partition
 
   def partition_all_classes
     prefix = File.basename(@cls, ".cls")
-    
     mapping = Hash.new
     @classes.each do |k,v|
       v.each{|contig| mapping[contig.name] = k}
@@ -353,10 +352,13 @@ class Extractor
   end
   
   def make_file_name(unique)
-    "#{@prefix}.#{unique}.#{@extension}"
+    name = "#{@prefix}.#{unique}.#{@extension}"
+    puts name
+    return name
   end
 
   def append_file(file,seq)
+    puts file
     out = File.open(file, 'a')
     out.puts seq
     out.close
@@ -429,7 +431,7 @@ if __FILE__ == $0 #needs to be removed if this script is distributed as part of 
   when "partition"
     log.info "Partitioning classes"
     if options.has_key?(:cls_file) & options.has_key?(:name_file) & options.has_key?(:fasta_file)
-      p = Partition.new(options[:cls_file], options[:name_file], options[:fasta_file])
+      p = Partition.new(options[:cls_file], options[:name_file], options[:fasta_file], log)
       p.partition
     else
       log.error "please specify -c -n & -f on the command line"
