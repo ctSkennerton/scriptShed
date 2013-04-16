@@ -1,0 +1,14 @@
+#!/bin/bash
+
+for file in "$@"; do
+    ext=${file##*.}
+    line_count=
+    if [ ext == 'gz' ]; then
+        line_count=`zcat $file | wc -l`
+    else
+        line_count=`wc -l $file`
+    fi
+    array=($line_count)
+    read_count=$((${array[0]}/4))
+     echo $read_count $file
+ done

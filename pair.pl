@@ -185,10 +185,10 @@ sub determine_pairing_convention {
     if(${$seq_ref}->name =~ /(.*)\.([fr])$/) {
         ${$seq_ref}->direction(($2 eq 'f') ? FORWARD : REVERSE);
         return ($1, 'newbler', ($2 eq 'f') ? FORWARD : REVERSE);
-    } elsif (${$seq_ref}->name =~ /(.*)\/(\d).*/) {
+    } elsif (${$seq_ref}->name =~ /(.*)\/(\d)$/) {
         ${$seq_ref}->direction(($2 == 1) ? FORWARD : REVERSE);
         return ($1, 'ill13', ($2 eq '1') ? FORWARD : REVERSE);
-    } elsif ( ${$seq_ref}->comment =~ /([12]):\w:\d:\w+/) {
+    } elsif ( ${$seq_ref}->comment =~ /([12]):\w:\d:\w+$/) {
         ${$seq_ref}->direction( ($1 == 1) ? FORWARD : REVERSE);
         return (${$seq_ref}->name, 'ill18', ($1 == 1) ? FORWARD : REVERSE);
     } else {
@@ -264,6 +264,9 @@ sub seg_main {
     # go through the input file and take note of which is the first and second read
     while (my $current_seq  = readfq($in_fh, \@aux)) {
         my ($name, $type, $direction) = determine_pairing_convention(\$current_seq);
+        if ($type eq 'unk') {
+            warn "Cannot determine pairing convention for:$$current_seq->name\n";
+        }
         push @{$pairs_hash{$name}}, \$current_seq;
     }
     close $in_fh;
@@ -271,6 +274,8 @@ sub seg_main {
     # go through all the reads and determine which are paired and which are single
     while(my($k,$v) = each %pairs_hash) {
         if(scalar @{$v} > 1) {
+            my $number_of_reads = scalar @{$v};
+            if($number_of_reads > 2) { warn "more than two pairs for $k ($number_of_reads)\n";}
             foreach my $e (sort {${$a}->direction <=> ${$b}->direction} @{$v}) {
                 (${$e}->direction == FORWARD) ? print_seq($e, $one_fh, undef,undef,undef) : print_seq($e, $two_fh,undef,undef,undef);
             }
