@@ -41,6 +41,7 @@ import numpy as np
 np.seterr(all='raise')
 
 import matplotlib as mpl
+mpl.use('Agg')
 from matplotlib.ticker import NullFormatter, MaxNLocator
 import matplotlib.pyplot as plt
 #from mpl_toolkits.mplot3d import axes3d, Axes3D
@@ -217,9 +218,9 @@ def doWork( args ):
     # present
     vcf_reader = vcf.Reader(open(args.snps))
     for record in vcf_reader:
-        if 'N' in record.REF or record.QUAL < args.snp_quality:
+        if int(record.QUAL) < int(args.snp_quality):
             continue
-        if args.filter is not None and record.CHROM not in args.filter or record.CHROM not in contig_stats:
+        if record.CHROM not in contig_stats:
             continue
         for sample in record.samples:
             if sample['GT'] != '0/0':
