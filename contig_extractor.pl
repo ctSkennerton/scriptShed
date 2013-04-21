@@ -74,8 +74,11 @@ if($ARGV{'-f'}) {
     } else {
         while (my $line = <$query>) 
         {
-            my $name = undef;
             chomp $line;
+            if ($line =~ /^$/) {
+                next;
+            }
+            my $name = undef;
             if($ARGV{'-l'}) {
                 $name = &list($line);
             } elsif ($ARGV{'-b'}) {
