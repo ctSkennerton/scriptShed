@@ -273,11 +273,29 @@ sub seg_main {
 
     # go through all the reads and determine which are paired and which are single
     while(my($k,$v) = each %pairs_hash) {
-        if(scalar @{$v} > 1) {
-            my $number_of_reads = scalar @{$v};
-            if($number_of_reads > 2) { warn "more than two pairs for $k ($number_of_reads)\n";}
-            foreach my $e (sort {${$a}->direction <=> ${$b}->direction} @{$v}) {
-                (${$e}->direction == FORWARD) ? print_seq($e, $one_fh, undef,undef,undef) : print_seq($e, $two_fh,undef,undef,undef);
+        my $number_of_reads = scalar @{$v};
+        if($number_of_reads > 1) {
+            if($number_of_reads > 2) { 
+                warn "more than one mapping for each mate for $k ($number_of_reads)\n";
+                my $done_forward = 0;
+                my $done_reverse = 0;
+                foreach my $e (sort {${$a}->direction <=> ${$b}->direction} @{$v}) {
+                    if (${e}->direction == FORWARD) {
+                        unless($done_forward) {
+                            print_seq($e, $one_fh, undef,undef,undef);
+                            $done_forward = 1;
+                        }
+                    } else {
+                        unless($done_reverse) {
+                            print_seq($e, $two_fh, undef,undef,undef);
+                            $done_reverse = 1;
+                        }
+                    }
+                }
+            } else {
+                foreach my $e (sort {${$a}->direction <=> ${$b}->direction} @{$v}) {
+                    (${$e}->direction == FORWARD) ? print_seq($e, $one_fh, undef,undef,undef) : print_seq($e, $two_fh,undef,undef,undef);
+                }
             }
         } else {
             print_seq($v->[0], $single_fh,undef,undef,undef);
