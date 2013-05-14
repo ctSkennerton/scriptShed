@@ -57,67 +57,66 @@ if (defined $ARGV{'-o'}) {
 my %seqs;
 my %cluster_map;
 #printAtStart();
+if(! defined $ARGV{'-r'}) {
+    if($ARGV{'-f'}) {
+        my @aux = undef;
+        while (my $seq = &readfq($query, \@aux)) {
+            if($ARGV{'-Ri'}) {
+                $seq->name =~ s/$ARGV{'-Ri'}/$1/;
+            }
+            $seqs{$seq->name} = 1;
+        }
+    } elsif (! defined $ARGV{'-n'}) {
+        if (defined $ARGV{'-c'}){
+            &mapping($ARGV{'-c'}, \%seqs);
+        } else {
 
-if($ARGV{'-f'}) {
-    my @aux = undef;
-    while (my $seq = &readfq($query, \@aux)) {
-        if($ARGV{'-Ri'}) {
-            # perform the split according to the user
-            my @p = split(/$ARGV{'-Ri'}->{separator}/, $seq->name);
-            $seq->name($p[$ARGV{'-Ri'}->{field_num}]);
-        }
-        $seqs{$seq->name} = 1;
-    }
-} elsif (! defined $ARGV{'-n'}) {
-    if (defined $ARGV{'-c'}){
-        &mapping($ARGV{'-c'}, \%seqs);
-    } else {
-        while (my $line = <$query>) 
-        {
-            chomp $line;
-            if ($line =~ /^$/) {
-                next;
-            }
-            my $name = undef;
-            if($ARGV{'-l'}) {
-                $name = &list($line);
-            } elsif ($ARGV{'-b'}) {
-                $name = &blast($line);
-            } elsif ($ARGV{'-s'}) {
-                # skip header lines
-                next if $line =~ /^@/;
-                $name =&sam($line);
-            } elsif ($ARGV{'-m'}) {
-                $name =&mannotator("UniRef90_".$line);
-            } else {
-                next if ($line =~ /^\#/);
-                last if ($line =~ /\#+FASTA/i);
-                $name =&gff($line);
-            }
-            if(! defined $name ) {
-                die "Crazy error!\n";
-            } else {
-                if($ARGV{'-Ri'}) {
-                    if ($name =~ /$ARGV{'-Ri'}/) {
-                        $name =  $1;
-                    }
+            while (my $line = <$query>) 
+            {
+                chomp $line;
+                if ($line =~ /^$/) {
+                    next;
                 }
-                $seqs{$name} = 1;
+                my $name = undef;
+                if($ARGV{'-l'}) {
+                    $name = &list($line);
+                } elsif ($ARGV{'-b'}) {
+                    $name = &blast($line);
+                } elsif ($ARGV{'-s'}) {
+                    # skip header lines
+                    next if $line =~ /^@/;
+                    $name =&sam($line);
+                } elsif ($ARGV{'-m'}) {
+                    $name =&mannotator("UniRef90_".$line);
+                } else {
+                    next if ($line =~ /^\#/);
+                    last if ($line =~ /\#+FASTA/i);
+                    $name =&gff($line);
+                }
+                if(! defined $name ) {
+                    die "Crazy error!\n";
+                } else {
+                    if($ARGV{'-Ri'}) {
+                        $name =~ s/$ARGV{'-Ri'}/$1/;
+                    }
+                    $seqs{$name} = 1;
+                }
             }
         }
-    }
-} else {
-    foreach my $e (@{$ARGV{'-n'}}) {
-        if($ARGV{'-Ri'}) {
-            # perform the split according to the user
-            my @p = split(/$ARGV{'-Ri'}->[0]/, $e);
-            $e = $p[$ARGV{'-Ri'}->[1]];
+    } elsif(defined $ARGV{'-n'}) {
+        foreach my $e (@{$ARGV{'-n'}}) {
+            if($ARGV{'-Ri'}) {
+                $e =~ s/$ARGV{'-Ri'}/$1/;
+            }
+            $seqs{$e} = 1;
         }
-        $seqs{$e} = 1;
     }
 }
 close $query;
 my $keys_to_find = scalar keys %seqs;
+if(defined $ARGV{'-r'}) {
+    $keys_to_find = 1;
+}
 foreach my $database (@{$ARGV{'-d'}}) {
     # check to see if there are any keys left
     last unless($keys_to_find > 0);
@@ -134,12 +133,24 @@ foreach my $database (@{$ARGV{'-d'}}) {
     my @aux = undef;
     while (my $seq = readfq($dfh, \@aux)) 
     {
+        if(defined $ARGV{'-r'}) {
+            if($seq->name =~ /$ARGV{'-r'}/ || $seq->comment =~ /$ARGV{'-r'}/) {
+                unless($ARGV{'-v'})
+                {
+                    print_seq(\$seq, $outfile);
+                }
+            }
+            elsif ($ARGV{'-v'})
+            {
+                print_seq(\$seq, $outfile);
+            }
+            next;
+        }
+        
         my $name2 = $seq->name;
         if($ARGV{'-Rd'}) {
             # perform the split according to the user
-            if ($seq->name =~ /$ARGV{'-Rd'}/) {
-                $name2 =  $1;
-            }
+            $name2 =~ s/$ARGV{'-Rd'}/$1/;
         }
         if (exists $seqs{$name2})
         {
@@ -461,6 +472,16 @@ Input is in gff3 format
 
 Input is a mannotator formated annotations file
 
+=item -r <regex>
+
+Specify a perl regular expression that will be matched against all sequences in the database.
+This option is not compatible with other types of input specified with -n or -i.  Unlike
+other methods this regex will match against both the name and the comment sections of the 
+fasta record
+
+=for Euclid
+    regex.excludes: name, input_file
+
 =item -S
 
 Used only when the input is in blast format; sets the subject as the list of identifiers. Default: query
@@ -498,7 +519,7 @@ The database file is bziped
 
 Force output to be in fasta format
 
-=item -Ri <separator> <field_num>
+=item -Ri <input_regex>
 
 The header in the input file contains additional information that must be removed.
 Specify a perl regular expression such that $1 (first capture group) contains the required information.
@@ -550,7 +571,7 @@ Do not print comments in fasta files
 
 =head1 VERSION
 
- 0.5.5
+ 0.5.7
 
 =head1 DESCRIPTION
 

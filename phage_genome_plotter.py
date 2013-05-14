@@ -213,17 +213,20 @@ def doWork( args ):
         for name, seq, qual in fx_parse(fp, callback=callback,
                 headers=args.filter):
             contig_stats[name]['length'] = len(seq)
+            contig_stats[name]['spacers'] = []
+            contig_stats[name]['snps'] = []
+            contig_stats[name]['rel_abs'] = []
 
     # open the vcf file containing SNPs get the timepoints that the SNP is
     # present
     vcf_reader = vcf.Reader(open(args.snps))
     for record in vcf_reader:
-        if int(record.QUAL) < int(args.snp_quality):
+        if record.QUAL is not None and int(record.QUAL) < int(args.snp_quality):
             continue
         if record.CHROM not in contig_stats:
             continue
         for sample in record.samples:
-            if sample['GT'] != '0/0':
+            if sample['GT'] != '0/0' and sample['GT'] != './.':
                 try:
                     contig_stats[record.CHROM]['snps'].append([record.POS, viral_samples[os.path.splitext(sample.sample)[0]]])
                 except:
@@ -273,8 +276,11 @@ def doWork( args ):
         rect_scatter = [left, bottom, width, height]
         rect_histy = [left_h, bottom, 0.2, height]
         
-        axScatter = plt.axes(rect_scatter)
-        axHisty = plt.axes(rect_histy)
+        fig = plt.figure()
+        axScatter = fig.add_axes(rect_scatter)
+        axHisty = fig.add_axes(rect_histy)
+        #axScatter = plt.axes(rect_scatter)
+        #axHisty = plt.axes(rect_histy)
         axHisty.set_xlabel('relative abundance')
         axHisty.yaxis.set_major_formatter(nullfmt)
         
@@ -311,13 +317,31 @@ def doWork( args ):
         sn_points = [x[0] for x in data['snps']]
         axScatter.plot_date(sn_points, sn_dates, color='0.7', marker='.',
                 xdate=False, ydate=True)
-
+         
+        axScatter.tick_params(axis='y', labelsize='small')
+        axHisty.tick_params(axis='y', labelsize='small')       
+        #
+        # Change the formatting of the xlabels to make them pretty
+        #
+        labels = axScatter.get_xticklabels() 
+        for label in labels: 
+            label.set_rotation(30)
+            label.set_horizontalalignment('right')
+            label.set_size('small')
+        
+        labels = axHisty.get_xticklabels()
+        for label in labels:
+            label.set_rotation(30)
+            label.set_horizontalalignment('right')
+            label.set_size('small')
+            
         plt.savefig(os.path.join(args.output, contig_name + ".png"), dpi=300,
             format='png')
         #-----
         # clean up!
-        #plt.close(fig)
-        #del fig
+        plt.close(fig)
+        #plt.close(axHisty)
+        del fig
 
     return 0
 
@@ -343,7 +367,7 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--filter', dest='filter', action='append',
             help="only make plots for the named contig")
     parser.add_argument('-o', '--output', dest='output', default='.',
-            help="only make plots for the named contig")
+            help="output directory for the image")
 
     # parse the arguments
     args = parser.parse_args()

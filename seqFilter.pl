@@ -158,23 +158,23 @@ sub length_test {
         return 1;
     }
     my $len = length ${$seq_ref};
-    if ($length_input_type == 0)
+    if (defined $seq_length[0] and defined $seq_length[1])
     {
         if (($len <= $seq_length[1]) and ($len >= $seq_length[0]))
         {
             return 1;
         }
     }
-    elsif ($length_input_type == 1) 
+    elsif (defined $seq_length[0]) 
     {
         if ($len >= $seq_length[0])
         {
             return 1;
         }
     }
-    elsif ($length_input_type == -1)
+    elsif (defined $seq_length[1])
     {
-        if($len <= $seq_length[0])
+        if($len <= $seq_length[1])
         {
             return 1;
         }
@@ -196,23 +196,23 @@ sub gc_test {
         return 1;
     }
     my $g_c = calcgc($seq_ref);
-    if ($gc_input_type  == 0)
+    if (defined $gc[0] and defined $gc[1])
     {
         if (($g_c <= $gc[1]) and ($g_c >= $gc[0]))
         {
             return 1;
         }
     }
-    elsif ($gc_input_type == 1) 
+    elsif (defined $gc[0]) 
     {
         if ($g_c >= $gc[0])
         {
             return 1;
         }
     }
-    elsif ($gc_input_type == -1)
+    elsif (defined $gc[1])
     {
-        if($g_c <= $gc[0])
+        if($g_c <= $gc[1])
 
         {
             return 1;
@@ -347,53 +347,16 @@ sub generate_parse_params
     my($len_ref, $gc_ref) = @_;
     if (exists ($ARGV{"-g"}))
     {
-        if ($ARGV{"-g"} =~ /:/) 
-        {
-            ${$gc_ref} = 0;
-            @gc = split (/:/, $ARGV{"-g"});
-        }
-        # if the user wants anything less than a specified gc percent
-        #//CTS// check that regex is correct
-        elsif ($ARGV{"-g"} =~ /\,(0.\d{1,})/)
-        {
-            ${$gc_ref} = -1;
-            push(@gc, $1);
-        }
-        # if the user wants anything greater than a specified gc percent
-        #//CTS// check that regex is correct    
-        elsif ($ARGV{"-g"} =~ /(0.\d{1,})\,/) {
-            ${$gc_ref} = 1;
-            push(@gc, $1);
-        } else {
-            warn "\nERROR: input parameter error for -g\n";
-            print Getopt::Euclid->usage();
-        }
+        @gc = split /[,:\.{1,2}]/, $ARGV{'-g'}, 2;
+        $gc[0] = undef if $gc[0] eq '';
+        $gc[1] = undef if $gc[1] eq '';
     }
-if (exists ($ARGV{"-l"}))
-	{
-    if ($ARGV{"-l"} =~ /:/) 
-    	{
-        ${$len_ref} = 0;
-        @seq_length = split (/:/, $ARGV{"-l"});
-        }
-    # if the user wants anything less than a specified length
-    elsif ($ARGV{"-l"} =~ /\,(\d+)/)
-    	{
-		${$len_ref} = -1;
-        push(@seq_length, $1);
-        }
-    # if the user wants anything greater than a specified length
-    elsif ($ARGV{"-l"} =~ /(\d+)\,/)
-    	{
-        ${$len_ref}  = 1;
-        push(@seq_length, $1);
-        } 
-    else
-    	{
-        warn "\nERROR: input parameter error for -l\n";
-        print Getopt::Euclid->usage();
-        }
-	}
+    if (exists ($ARGV{"-l"}))
+    {
+        @seq_length = split /[,:\.{1,2}]/, $ARGV{'-l'}, 2;
+        $seq_length[0] = undef if $seq_length[0] eq '';
+        $seq_length[1] = undef if $seq_length[1] eq '';
+    }
 }
 
 
@@ -402,7 +365,7 @@ sub printAtEnd
 warn<<"EOF";
 ---------------------------------------------------------------- 
  $0
- Copyright (C) 2010, 2011, 2012 Connor Skennerton
+ Copyright (C) 2010 - 2013 Connor Skennerton
     
  This program comes with ABSOLUTELY NO WARRANTY;
  This is free software, and you are welcome to redistribute it
@@ -419,7 +382,7 @@ __DATA__
  
 =head1 COPYRIGHT
  
- copyright (C) 2010, 2011 Connor Skennerton
+ copyright (C) 2010 - 2013 Connor Skennerton
  
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by

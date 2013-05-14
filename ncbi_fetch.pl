@@ -33,11 +33,23 @@ use constant {
 my $global_options = checkParams();
 my $format = overrideDefault('gb', 'outformat');
 
+my @ids;
+if(defined $global_options->{'patterns'}) {
+    open(PAT, '<', $global_options->{'patterns'}) || die $!;
+    while(<PAT>) {
+        chomp;
+        push @ids, $_;
+    }
+    close PAT;
+} else {
+    @ids = @ARGV;
+}
+
 my $factory = Bio::DB::EUtilities->new(-eutil   => 'efetch',
     -db      => $global_options->{'db'},
     -rettype => $format,
     -email   => 'mymail@foo.bar',
-    -id      => \@ARGV);
+    -id      => \@ids);
 
 my $file = overrideDefault('file.'.$format, 'outfile');
 
@@ -50,7 +62,7 @@ sub checkParams {
     #-----
     # Do any and all options checking here...
     #
-    my @standard_options = ( "help|h+", "db|d=s", "outfile|o=s", "outformat|F=s");
+    my @standard_options = ( "help|h+", "db|d=s", "outfile|o=s", "outformat|F=s", "patterns|f=s");
     my %options;
 
     # Add any other command line options, and the code to handle them
@@ -59,7 +71,7 @@ sub checkParams {
 
     # if no arguments supplied print the usage and exit
     #
-    exec("pod2usage $0") if (0 == (scalar (@ARGV) ));
+    #exec("pod2usage $0") if (0 == (scalar (@ARGV) ));
 
     # If the -help option is set, print the usage and exit
     #
@@ -125,9 +137,10 @@ __DATA__
 
 =head1 SYNOPSIS
 
-    ncbi_fetch.pl  [-help|h] [-db|d DATABASE] [-outfile|o FILE] [-outformat|F FORMAT] ID [ID ...]
+    ncbi_fetch.pl  [-help|h] [-db|d DATABASE] [-outfile|o FILE] [-outformat|F FORMAT] [-patterns|f FILE] [ID [ID ...]]
 
       [-help -h]                   Displays basic usage information
+      [-patterns -f FILE]          Specify a file that contains IDs, one per line to fetch
       [-db -d DATABASE]            Specify NCBI database to fetch from. Common options would
                                    be 'protein' or 'nuccore'
       [-outformat -F FORMAT]       Specify the output format. Default: genbank (gb)
