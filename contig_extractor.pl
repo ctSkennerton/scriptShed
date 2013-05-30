@@ -117,6 +117,7 @@ my $keys_to_find = scalar keys %seqs;
 if(defined $ARGV{'-r'}) {
     $keys_to_find = 1;
 }
+
 foreach my $database (@{$ARGV{'-d'}}) {
     # check to see if there are any keys left
     last unless($keys_to_find > 0);
@@ -160,7 +161,7 @@ foreach my $database (@{$ARGV{'-d'}}) {
                     $outfile = $seqs{$name2};
                 }
                 print_seq(\$seq, $outfile);
-                $keys_to_find--;
+                $keys_to_find-- unless ($ARGV{'-F'});
             }
         }
         elsif ($ARGV{'-v'})
@@ -567,11 +568,20 @@ Default: no conversion
 
 Do not print comments in fasta files
 
+=item -F
+
+Force scanning the entire database file.  contig_etractor tries to speed up processing by keeping track
+of the patterns that have been found and exiting when they all have been, even if the end of the database
+file has not been reached.  However the combination of other options such as -Ri or -Rd means that
+sometimes the patterns are not unique and so scanning should be forced till the end of the file to 
+ensure that all matches are found
+be unique, however if that is not the case 
+
 =back
 
 =head1 VERSION
 
- 0.5.7
+ 0.5.8
 
 =head1 DESCRIPTION
 
