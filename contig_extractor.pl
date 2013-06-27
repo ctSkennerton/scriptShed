@@ -61,10 +61,11 @@ if(! defined $ARGV{'-r'}) {
     if($ARGV{'-f'}) {
         my @aux = undef;
         while (my $seq = &readfq($query, \@aux)) {
+            my $name2 = $seq->name;
             if($ARGV{'-Ri'}) {
-                $seq->name =~ s/$ARGV{'-Ri'}/$1/;
+                $name2 =~ s/$ARGV{'-Ri'}/$1/;
             }
-            $seqs{$seq->name} = 1;
+            $seqs{$name2} = 1;
         }
     } elsif (! defined $ARGV{'-n'}) {
         if (defined $ARGV{'-c'}){
