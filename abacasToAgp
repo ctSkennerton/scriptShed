@@ -1,0 +1,54 @@
+#!/usr/bin/env ruby
+
+require 'optparse'
+require 'bio'
+
+SCRIPT_NAME = File.basename(__FILE__)
+prefix = ''
+# Parse command line options into the options hash
+o = OptionParser.new do |opts|
+  opts.banner = "
+    Usage: #{SCRIPT_NAME} file.tab
+
+    Give the .tab file of the contigs created by abacas and outputs an AGP file\n\n"
+  opts.on('-p', '--prefix NAME', "give a prefix to the outputed scaffolds"){|arg| prefix = arg}
+end
+o.parse!
+if ARGV.length == 0
+    $stderr.puts o
+    exit(1)
+end
+
+scaffold_number = 1
+ARGV.each do |infile|
+ff = Bio::FlatFile.new(Bio::EMBL, File.open(infile))
+
+# iterates over each GenBank entry
+ff.each_entry do |gb|
+  part_number = 1
+  # iterates over each element in 'features'
+  prev_end = 0
+  gb.features.each do |feature|
+    feature.locations.each do |location|
+      if prev_end != 0 and location.from != prev_end + 1
+        gap_type = 'N'
+        if location.from - prev_end == 100
+          gap_type = 'U'
+        end
+        print "#{prefix}#{infile[0,6]}_scaffold\t#{prev_end + 1}\t#{location.from - 1}\t#{part_number}\t#{gap_type}\t#{location.from - prev_end}\tscaffold\tyes\talign_genus\n"
+        part_number += 1
+      end
+      print "#{prefix}#{infile[0,6]}_scaffold\t#{location.from}\t#{location.to}\t#{part_number}\tW\t#{feature.assoc['systematic_id']}\t1\t#{1 + location.to - location.from}\t"
+      if location.strand == 1
+        print "+\n"
+      else
+         print "-\n"
+      end
+      part_number += 1
+      prev_end = location.to
+    end
+  end
+  scaffold_number += 1
+end
+
+end
