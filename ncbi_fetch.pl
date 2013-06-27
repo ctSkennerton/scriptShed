@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 #core Perl modules
-use Getopt::Long;
+use Getopt::Long qw(:config no_ignore_case bundling);
 use Carp;
 
 #CPAN modules
