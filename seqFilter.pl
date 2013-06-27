@@ -55,7 +55,7 @@ if (defined $ARGV{'-o'}) {
 
 
 #globals
-my (@gc, @seq_length, @coverage);
+my (@gc, @seq_length, @ns);
 my %genes;
 my $total_base =0; my $seq_count = 0; my $total_gc = 0;
 # set these to -1,0,1 depending on what type of test we want:
@@ -85,16 +85,16 @@ if($ARGV{'-i'}) {
     $infile = \*STDIN;
 }
 while (($name, $seq, $qual) = &readfq($infile, \@aux)) {
-    if ((&length_test(\$seq) & &gc_test(\$seq)) ^ defined $ARGV{'-v'}) {
+    if ((&length_test(\$seq) & &gc_test(\$seq) & &n_test(\$seq)) ^ defined $ARGV{'-v'}) {
 
         unless( exists $ARGV{'-A'}) {
             if(exists $ARGV{'-r'} ) {
                 if ($ARGV{'-h'}) {
                     my $h_len = human_output(length $seq);
                     my $h_gc = human_output(calcgc(\$seq));
-                    $outfile->printf("%s\t%s\t%s\n", $name, $h_len, $h_gc);
+                    $outfile->printf("%s\t%s\t%s\t%s\n", $name, $h_len, $h_gc, human_output(calcn(\$seq)));
                 } else {
-                    $outfile->printf("%s\t%d\t%.4f\n", $name, length $seq, calcgc(\$seq));
+                    $outfile->printf("%s\t%d\t%.4f\t%.4f\n", $name, length $seq, calcgc(\$seq), calcn(\$seq));
                 }
             } else {
                 print_seq(\$name,\$seq,\$qual, $outfile);
@@ -148,6 +148,44 @@ sub human_output {
 
 }
 
+sub n_test {
+    my $seq_ref = shift;
+    # if we are not filtering on length
+    # then just skip over this test
+    # alternatively we might be in report mode and therefore
+    # not filtering anyway
+    unless (exists $ARGV{'-n'}) {
+        return 1;
+    }
+    my $n = calcn($seq_ref);
+    if (defined $ns[0] and defined $ns[1])
+    {
+        if (($n <= $ns[1]) and ($n >= $ns[0]))
+        {
+            return 1;
+        }
+    }
+    elsif (defined $ns[0]) 
+    {
+        if ($n >= $ns[0])
+        {
+            return 1;
+        }
+    }
+    elsif (defined $ns[1])
+    {
+        if($n <= $ns[1])
+        {
+            return 1;
+        }
+    }    	
+    else
+    {
+        print "no sequences match your criteria";
+    }
+    return 0;
+
+}
 sub length_test {
     my $seq_ref = shift;
     # if we are not filtering on length
@@ -335,6 +373,11 @@ sub readfq {
 
 # print an aggregate report of all the sequences
     
+sub calcn {
+    my ($seq_ref) = @_;
+    my $count = ${$seq_ref} =~ tr/Nn/Nn/;
+    return $count / length ${$seq_ref};
+}
 
 sub calcgc {
     my ($seq_ref) = @_;
@@ -347,15 +390,21 @@ sub generate_parse_params
     my($len_ref, $gc_ref) = @_;
     if (exists ($ARGV{"-g"}))
     {
-        @gc = split /[,:\.{1,2}]/, $ARGV{'-g'}, 2;
+        @gc = split /[,:\.]/, $ARGV{'-g'}, 2;
         $gc[0] = undef if $gc[0] eq '';
         $gc[1] = undef if $gc[1] eq '';
     }
     if (exists ($ARGV{"-l"}))
     {
-        @seq_length = split /[,:\.{1,2}]/, $ARGV{'-l'}, 2;
+        @seq_length = split /[,:\.]/, $ARGV{'-l'}, 2;
         $seq_length[0] = undef if $seq_length[0] eq '';
         $seq_length[1] = undef if $seq_length[1] eq '';
+    }
+    if (exists ($ARGV{"-n"}))
+    {
+        @ns = split /[,:\.]/, $ARGV{'-n'}, 2;
+        $ns[0] = undef if $ns[0] eq '';
+        $ns[1] = undef if $ns[1] eq '';
     }
 }
 
@@ -450,6 +499,19 @@ parse sequences based on the length value, specified as an integer.
                       in the second form a single comma is placed before or after the specified
                       value.  if the comma is before then it is interperated that the user would
                       like all values less than the specified GC (inclusive); or greater than
+                      if the comma is placed after the value.
+
+=item -n <n> | --ns <n>
+
+parse sequences based on the persentage of Ns specified as a decimal.
+                      there are two forms of this option. first is range where two values
+                      are separated by a colon.  this will be interperated as the lower and
+                      upper limits for the sequences; any sequences that fall between these 
+                      two values (inclusive) will be printed
+                      
+                      in the second form a single comma is placed before or after the specified
+                      value.  if the comma is before then it is interperated that the user would
+                      like all values less than the specified Ns (inclusive); or greater than
                       if the comma is placed after the value.
 
 =item -m <maximum> | --maximum <maximum>
