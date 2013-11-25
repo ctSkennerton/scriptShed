@@ -6,10 +6,17 @@ CC = gcc
 CFLAGS = -g -O2 -Wall -pthread
 HTS = $(HOME)/local/htslib
 LIBS = -lz -lpthread -lm
-EXECUTABLE = bam-depth
+EXECUTABLE = bamdepth
 
-all:
-	$(CC) $(CFLAGS) -L$(HTS) -I$(HTS) -o $(EXECUTABLE) main.c bedidx.c $(HTS)/libhts.a $(LIBS)
+SOURCES = main.c bedidx.c
+
+install: $(EXECUTABLE)
+	ln -s bam-depth/$(EXECUTABLE) ..
+
+$(EXECUTABLE): $(SOURCES)
+	$(CC) $(CFLAGS) -L$(HTS) -I$(HTS) -o $@ $^ $(HTS)/libhts.a $(LIBS)
+
+all: $(EXECUTABLE)
 
 
 # vim:ft=make
