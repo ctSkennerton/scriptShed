@@ -1,9 +1,3 @@
-/* This program demonstrates how to generate pileup from multiple BAMs
- * simutaneously, to achieve random access and to use the BED interface.
- * To compile this program separately, you may:
- *
- *   gcc -g -O2 -Wall -o avecov main.c -L$HOME/local/htslib -I$HOME/local/htslib/htslib -lhts -lz
- */
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -157,6 +151,22 @@ int main(int argc, char *argv[])
         }
         prev_tid = tid;
 	}
+    if(avecov) {
+        if(prev_tid != -1) {  // last chrom
+            fputs(h->target_name[prev_tid], stdout);
+            float reg_length;
+            if(reg) {
+                reg_length = (float)(end+1 - beg);
+            } else {
+                reg_length = (float)h->target_len[prev_tid];
+            }
+            printf("\t%.0f", reg_length);
+            for (i = 0; i < n; ++i) {
+                printf("\t%.2f", (float)total_reads[i]/reg_length);
+            }
+            putchar('\n');
+        }
+    }
 	free(n_plp); free(plp); free(total_reads);
 	bam_mplp_destroy(mplp);
 

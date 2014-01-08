@@ -10,7 +10,7 @@ format_identifiers = {
   'n' => 'note',
   'f' => 'function',
   'P' => 'protein_id',
-  'A' => :accession
+  'A' => 'accession'
 }
 
 options = {
@@ -44,7 +44,11 @@ ff = Bio::FlatFile.new(Bio::GenBank, ARGF)
 ff.each_entry do |gb|
   output = $stdout
   if options[:split_records]
-    output = File.open("#{gb.accession}.faa", 'w')
+    filename = gb.accession
+    if filename.empty?
+      filename = gb.entry_id
+    end
+    output = File.open("#{filename}.faa", 'w')
   end
   # iterates over each element in 'features'
   gb.features.each do |feature|

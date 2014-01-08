@@ -3,7 +3,6 @@ use warnings;
 use strict;
 use Bio::SeqIO;
 use Getopt::Long;
-# get command-line arguments, or die with a usage statement
 
 
 BEGIN {
@@ -13,20 +12,23 @@ BEGIN {
     $| = 1;
 }
 
-# get input params and print copyright
-printAtStart();
 my $options = checkParams();
 
 # get outptut file name
-my $out_filename = $options->{'in'}.".outf";
-if(exists ($options->{"out"})) { $out_filename = $options->{"out"}; }
+my $out_file; # = $options->{'in'}.".outf";
+my $in_file;
+if(exists ($options->{"out"})) {  open($out_file, '>', $options->{"out"}) || die $!; }
+else{ $out_file = \*STDOUT;}
+
+if(exists ($options->{"in"})) {  open($in_file, '<', $options->{"in"}) || die $!; }
+else{ $in_file = \*STDIN;}
 
 
 
 # create one SeqIO object to read in,and another to write out
-my $seq_in = Bio::SeqIO->new('-file' => $options->{"in"},
+my $seq_in = Bio::SeqIO->new('-fh' => $in_file,
                              '-format' => $options->{"inf"});
-my $seq_out = Bio::SeqIO->new('-file' => ">".$options->{"out"},
+my $seq_out = Bio::SeqIO->new('-fh' => $out_file,
                              '-format' => $options->{"outf"});
 
 # write each entry in the input file to the output file

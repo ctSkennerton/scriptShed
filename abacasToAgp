@@ -8,7 +8,7 @@ prefix = ''
 # Parse command line options into the options hash
 o = OptionParser.new do |opts|
   opts.banner = "
-    Usage: #{SCRIPT_NAME} file.tab
+    Usage: #{SCRIPT_NAME} file.tab [file.tab ...]
 
     Give the .tab file of the contigs created by abacas and outputs an AGP file\n\n"
   opts.on('-p', '--prefix NAME', "give a prefix to the outputed scaffolds"){|arg| prefix = arg}
@@ -21,6 +21,7 @@ end
 
 scaffold_number = 1
 ARGV.each do |infile|
+  filebasename = File.basename(infile)
 ff = Bio::FlatFile.new(Bio::EMBL, File.open(infile))
 
 # iterates over each GenBank entry
@@ -28,17 +29,24 @@ ff.each_entry do |gb|
   part_number = 1
   # iterates over each element in 'features'
   prev_end = 0
+  if gb.features.length == 1
+    next
+  end
   gb.features.each do |feature|
     feature.locations.each do |location|
+      sample_name = filebasename[0,6]
+      if sample_name == 'ACSBR9'
+        sample_name += '_S11'
+      end
       if prev_end != 0 and location.from != prev_end + 1
         gap_type = 'N'
         if location.from - prev_end == 100
           gap_type = 'U'
         end
-        print "#{prefix}#{infile[0,6]}_scaffold\t#{prev_end + 1}\t#{location.from - 1}\t#{part_number}\t#{gap_type}\t#{location.from - prev_end}\tscaffold\tyes\talign_genus\n"
+        print "#{prefix}#{sample_name}_scaffold\t#{prev_end + 1}\t#{location.from - 1}\t#{part_number}\t#{gap_type}\t#{location.from - prev_end}\tscaffold\tyes\talign_genus\n"
         part_number += 1
       end
-      print "#{prefix}#{infile[0,6]}_scaffold\t#{location.from}\t#{location.to}\t#{part_number}\tW\t#{feature.assoc['systematic_id']}\t1\t#{1 + location.to - location.from}\t"
+      print "#{prefix}#{sample_name}_scaffold\t#{location.from}\t#{location.to}\t#{part_number}\tW\t#{feature.assoc['systematic_id']}\t1\t#{1 + location.to - location.from}\t"
       if location.strand == 1
         print "+\n"
       else

@@ -78,10 +78,11 @@ my $grep_option_string = generate_grep_option_string();
 my $cmd = "grep ";
 if (defined $grep_option_string) { $cmd.= $grep_option_string;} 
 if(defined $regex){
-    $cmd.= "$regex ";
+    $cmd.= "'$regex' ";
 } 
 $cmd .=  join " ", @ARGV; 
 $cmd.= "\n";
+#warn $cmd;
 system($cmd);
 ######################################################################
 # CUSTOM SUBS

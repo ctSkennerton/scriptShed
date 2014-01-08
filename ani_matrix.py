@@ -80,7 +80,8 @@ def plot_pair(ax, data, title=None, xtitle=None, ytitle=None, stats=True):
 
 def matrix_plots(data, nrow, ncol, genome_names, output, xaxismin=50,
         xaxismax=105):
-    fig, subplots = plt.subplots(nrows=nrow, ncols=ncol, sharex=True)
+    fig, subplots = plt.subplots(nrows=nrow, ncols=ncol, sharex=True,
+            figsize=(10,8))
     row_counter = 0
     data_counter = len(genome_names) - 1
     for row in subplots:
@@ -111,8 +112,9 @@ def matrix_plots(data, nrow, ncol, genome_names, output, xaxismin=50,
                 #ax.set_axis_off()
             col_counter += 1
         row_counter += 1
-
-    plt.tight_layout()
+    fig.subplots_adjust(hspace=0.1, wspace=0.35, left=0.08, bottom=0.08,
+            top=0.9, right=0.9 )
+    #plt.tight_layout()
     plt.savefig(output, dpi=300, bbox_inches=0)
 
     #-----

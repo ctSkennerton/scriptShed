@@ -1,4 +1,15 @@
 #!/bin/bash
+view_F=0
+view_f=0
+while getopts "F:f:" opt; do
+    case $opt in
+        F)
+            view_F=$OPTARG;;
+        f)
+            view_f=$OPTARG;;
+    esac
+done
+shift $((OPTIND-1))
 for var in "$@"; do
-samtools view -SubF 4 $var | samtools sort - ${var%.sam} && samtools index ${var%.sam}".bam"
+samtools view -Sub -f $view_f -F $view_F $var | samtools sort - ${var%.sam} && samtools index ${var%.sam}".bam"
 done

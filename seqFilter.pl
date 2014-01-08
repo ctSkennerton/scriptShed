@@ -3,7 +3,7 @@
 #
 #    filters or gets statistics for contigs/reads
 #
-#    Copyright (C) 2010, 2011, 2012 Connor Skennerton
+#    Copyright (C) 2010 - 2013 Connor Skennerton
 #
 #
 #    This program is free software: you can redistribute it and/or modify
@@ -84,17 +84,25 @@ if($ARGV{'-i'}) {
 } else {
     $infile = \*STDIN;
 }
+my $longest_seq_length = 0;
+my ($longest_name,$longset_seq, $longest_qual);
 while (($name, $seq, $qual) = &readfq($infile, \@aux)) {
     if ((&length_test(\$seq) & &gc_test(\$seq) & &n_test(\$seq)) ^ defined $ARGV{'-v'}) {
-
-        unless( exists $ARGV{'-A'}) {
+        if (length($seq) > $longest_seq_length) {
+            $longest_seq_length = length($seq);
+            $longest_name = $name;
+            $longset_seq = $seq;
+            $longest_qual = $qual;
+        }
+        unless( exists $ARGV{'-A'} || exists $ARGV{'--longest'}) {
             if(exists $ARGV{'-r'} ) {
+                my $prefix = sprintf ("%s", (exists $ARGV{'-H'}) ? $ARGV{'-i'}.":$name" : $name );
                 if ($ARGV{'-h'}) {
                     my $h_len = human_output(length $seq);
                     my $h_gc = human_output(calcgc(\$seq));
-                    $outfile->printf("%s\t%s\t%s\t%s\n", $name, $h_len, $h_gc, human_output(calcn(\$seq)));
+                    $outfile->printf("%s\t%s\t%s\t%s\n", $prefix, $h_len, $h_gc, human_output(calcn(\$seq)));
                 } else {
-                    $outfile->printf("%s\t%d\t%.4f\t%.4f\n", $name, length $seq, calcgc(\$seq), calcn(\$seq));
+                    $outfile->printf("%s\t%d\t%.4f\t%.4f\n", $prefix, length $seq, calcgc(\$seq), calcn(\$seq));
                 }
             } else {
                 print_seq(\$name,\$seq,\$qual, $outfile);
@@ -106,18 +114,33 @@ while (($name, $seq, $qual) = &readfq($infile, \@aux)) {
     } 
 }
 $infile->close();
+if(defined $ARGV{'--longest'}) {
+    if(defined $longest_name) {
+        print_seq(\$longest_name, \$longset_seq, \$longest_qual, $outfile);
+    }
+}
+
 if( exists $ARGV{"-a"} | exists $ARGV{'-A'}) 
 {
+    my $prefix = sprintf("%s%d\t", (exists $ARGV{'-H'}) ? $ARGV{'-i'}."\t" : "", $seq_count);
     if ($seq_count > 1) {
         my $n50 = $total_base / ($seq_count / 2);
-        printf "%s sequences %s with an average length of %s and an n50 of %s\n", $seq_count,human_output($total_base), human_output($total_base / $seq_count), human_output($n50);
+        if($ARGV{'-h'}) {
+            printf "%s%s\t%s\t%s\n", $prefix,human_output($total_base), human_output($total_base / $seq_count), human_output($n50);
+        } else {
+            printf "%s%s\t%.2f\t%.2f\n", $prefix,$total_base,$total_base / $seq_count,$n50;
+        }
     } else {
-        printf "%s\n", human_output($total_base);
+        if($ARGV{'-h'}) {
+            printf "%s%s\tNA\tNA\n", $prefix, human_output($total_base);
+        } else {
+            printf "%s%s\tNA\tNA\n", $prefix, $total_base;
+        }
     }
 }
 
 #close OUT;
-unless(defined $ARGV{'--quiet'}){ printAtEnd();}
+#unless(defined $ARGV{'--quiet'}){ printAtEnd();}
 exit;
 
 sub human_output {
@@ -138,8 +161,10 @@ sub human_output {
      # Giga- (G) bases
      } elsif ( 1 <= ($result = ($num / 10**9))) {
          return sprintf "%.3f Gbp", $result;
+    # Mega- (M) bases
      } elsif ( 1 <= ($result = ($num / 10**6))) {
          return sprintf "%.3f Mbp", $result;
+    # kilo- (k) bases
      } elsif ( 1 <= ($result = ($num / 10**3))) {
          return sprintf "%.3f kbp", $result;
      } else {
@@ -390,19 +415,19 @@ sub generate_parse_params
     my($len_ref, $gc_ref) = @_;
     if (exists ($ARGV{"-g"}))
     {
-        @gc = split /[,:\.]/, $ARGV{'-g'}, 2;
+        @gc = split /[,:]/, $ARGV{'-g'}, 2;
         $gc[0] = undef if $gc[0] eq '';
         $gc[1] = undef if $gc[1] eq '';
     }
     if (exists ($ARGV{"-l"}))
     {
-        @seq_length = split /[,:\.]/, $ARGV{'-l'}, 2;
+        @seq_length = split /[,:]/, $ARGV{'-l'}, 2;
         $seq_length[0] = undef if $seq_length[0] eq '';
         $seq_length[1] = undef if $seq_length[1] eq '';
     }
     if (exists ($ARGV{"-n"}))
     {
-        @ns = split /[,:\.]/, $ARGV{'-n'}, 2;
+        @ns = split /[,:]/, $ARGV{'-n'}, 2;
         $ns[0] = undef if $ns[0] eq '';
         $ns[1] = undef if $ns[1] eq '';
     }
@@ -517,7 +542,11 @@ parse sequences based on the persentage of Ns specified as a decimal.
 =item -m <maximum> | --maximum <maximum>
           
  modifier of  -g -l  prints only the specified maximum number of sequences
- 
+
+=item --longest
+
+Output only the longest sequence
+
 =item -r | --report 
                      
  modifies the print function so that the name, length, GC and coverage are 
@@ -568,6 +597,10 @@ The input file is bziped
 =item -h
 
 Human readable output
+
+=item -H
+
+Prefix stats with the file name. Only applicable when -r is used
 
 =item -A
 

@@ -158,6 +158,8 @@ class LinkFinder:
     def iterateThroughContigs(self):
         for contig,length in zip(self.bamFile.references,
                 self.bamFile.lengths):
+            if length < 4000:
+                continue
             if self.doSubset is True:
                 self.findInSubset(contig, length)
             elif self.endLength> 0:

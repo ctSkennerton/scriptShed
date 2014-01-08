@@ -1,0 +1,3 @@
+#!/bin/bash
+seqFilter.pl --quiet -r "$@"
+

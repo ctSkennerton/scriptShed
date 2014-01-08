@@ -162,7 +162,7 @@ foreach my $database (@{$ARGV{'-d'}}) {
                     $outfile = $seqs{$name2};
                 }
                 print_seq(\$seq, $outfile);
-                $keys_to_find-- unless ($ARGV{'-F'});
+                $keys_to_find-- unless ($ARGV{'-Force'});
             }
         }
         elsif ($ARGV{'-v'})
@@ -569,7 +569,7 @@ Default: no conversion
 
 Do not print comments in fasta files
 
-=item -F
+=item -Force
 
 Force scanning the entire database file.  contig_etractor tries to speed up processing by keeping track
 of the patterns that have been found and exiting when they all have been, even if the end of the database
@@ -582,7 +582,7 @@ be unique, however if that is not the case
 
 =head1 VERSION
 
- 0.5.8
+ 0.5.9
 
 =head1 DESCRIPTION
 

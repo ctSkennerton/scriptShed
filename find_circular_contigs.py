@@ -56,27 +56,40 @@ import pysam
 class BamCallback:
     def __init__(self, refLength, start=700, end=700):
         self.circularPairs = {}
+        self.otherContigLinks = {}
         self.refLen = refLength
         self.startBoundary = start
         self.endBoundary = refLength - end
         self.Verbose= False
 
     def __call__(self, alignedRead):
-        if alignedRead.tid != alignedRead.rnext:
-            return
         if alignedRead.is_paired and not alignedRead.is_unmapped and not alignedRead.mate_is_unmapped:
-            if alignedRead.pos <= self.startBoundary and alignedRead.pnext >= self.endBoundary:
-                try:
-                    self.circularPairs[alignedRead.qname].append(alignedRead)
-                except KeyError:
-                    self.circularPairs[alignedRead.qname] = []
-                    self.circularPairs[alignedRead.qname].append(alignedRead)
-            elif alignedRead.pos >= self.endBoundary and alignedRead.pnext <= self.startBoundary:
-                try:
-                    self.circularPairs[alignedRead.qname].append(alignedRead)
-                except KeyError:
-                    self.circularPairs[alignedRead.qname] = []
-                    self.circularPairs[alignedRead.qname].append(alignedRead)
+            if alignedRead.tid != alignedRead.rnext:
+                if alignedRead.pos <= self.startBoundary:
+                    try:
+                        self.otherContigLinks[alignedRead.qname].append(alignedRead)
+                    except KeyError:
+                        self.otherContigLinks[alignedRead.qname] = []
+                        self.otherContigLinks[alignedRead.qname].append(alignedRead)
+                elif alignedRead.pos >= self.endBoundary:
+                    try:
+                        self.otherContigLinks[alignedRead.qname].append(alignedRead)
+                    except KeyError:
+                        self.otherContigLinks[alignedRead.qname] = []
+                        self.otherContigLinks[alignedRead.qname].append(alignedRead)
+            else:
+                if alignedRead.pos <= self.startBoundary and alignedRead.pnext >= self.endBoundary:
+                    try:
+                        self.circularPairs[alignedRead.qname].append(alignedRead)
+                    except KeyError:
+                        self.circularPairs[alignedRead.qname] = []
+                        self.circularPairs[alignedRead.qname].append(alignedRead)
+                elif alignedRead.pos >= self.endBoundary and alignedRead.pnext <= self.startBoundary:
+                    try:
+                        self.circularPairs[alignedRead.qname].append(alignedRead)
+                    except KeyError:
+                        self.circularPairs[alignedRead.qname] = []
+                        self.circularPairs[alignedRead.qname].append(alignedRead)
 
 def add_circ_to_db(args, circ_contigs):
     import sqlite3
@@ -128,7 +141,7 @@ def doWork( args ):
             if len(rl.circularPairs) >= args.links:
                 circ_contigs.add(reference)
                 if not args.quiet:
-                    print reference, length, len(rl.circularPairs)
+                    print reference, length, len(rl.circularPairs), len(rl.otherContigLinks)
                 circ_count += 1.0
         if args.summary:
             print "total: %d circular: %d percentage: %f" % (total_count, circ_count,circ_count / total_count)

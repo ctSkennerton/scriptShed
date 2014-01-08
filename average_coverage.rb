@@ -2,7 +2,6 @@
 #
 require 'bio'
 require 'bio-samtools'
-require 'csv'
 require 'optparse'
 
 options = { #TODO set defaults here

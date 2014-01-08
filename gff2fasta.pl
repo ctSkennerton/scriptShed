@@ -18,10 +18,11 @@ open (GFF, '<', $ARGV[0])
   or die "fail\n";
  
 while(<GFF>){
-  my ($seqid, undef, undef, $start, $end,
+  my ($seqid, undef, $feattype, $start, $end,
       undef, undef, undef, $attrs) = split;
- 
-  push @{$gff{$seqid}}, [$start, $end, $attrs];
+  if ($feattype eq "CDS") {
+      push @{$gff{$seqid}}, [$start, $end, $attrs];
+  }
 }
  
 warn "OK\n";
