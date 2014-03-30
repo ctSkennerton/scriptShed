@@ -5,66 +5,66 @@
 # This script calculates Average Nucleotide Identity (ANI) according to one of
 # a number of alternative methods described in, e.g.
 #
-# Richter M, Rossello-Mora R (2009) Shifting the genomic gold standard for the 
-# prokaryotic species definition. Proc Natl Acad Sci USA 106: 19126-19131. 
+# Richter M, Rossello-Mora R (2009) Shifting the genomic gold standard for the
+# prokaryotic species definition. Proc Natl Acad Sci USA 106: 19126-19131.
 # doi:10.1073/pnas.0906412106. (ANI1020, ANIm, ANIb)
 #
-# Goris J, Konstantinidis KT, Klappenbach JA, Coenye T, Vandamme P, et al. 
-# (2007) DNA-DNA hybridization values and their relationship to whole-genome 
-# sequence similarities. Int J Syst Evol Micr 57: 81-91. 
+# Goris J, Konstantinidis KT, Klappenbach JA, Coenye T, Vandamme P, et al.
+# (2007) DNA-DNA hybridization values and their relationship to whole-genome
+# sequence similarities. Int J Syst Evol Micr 57: 81-91.
 # doi:10.1099/ijs.0.64483-0.
 #
-# ANI is proposed to be the appropriate in silico substitute for DNA-DNA 
-# hybridisation (DDH), and so useful for delineating species boundaries. A 
-# typical percentage threshold for species boundary in the literature is 95% 
+# ANI is proposed to be the appropriate in silico substitute for DNA-DNA
+# hybridisation (DDH), and so useful for delineating species boundaries. A
+# typical percentage threshold for species boundary in the literature is 95%
 # ANI (e.g. Richter et al. 2009).
 #
 # All ANI methods follow the basic algorithm:
-# - Align the genome of organism 1 against that of organism 2, and identify 
+# - Align the genome of organism 1 against that of organism 2, and identify
 #   the matching regions
 # - Calculate the percentage nucleotide identity of the matching regions, as
 #   an average for all matching regions
-# Methods differ on: (1) what alignment algorithm is used, and the choice of 
+# Methods differ on: (1) what alignment algorithm is used, and the choice of
 # parameters (this affects the aligned region boundaries); (2) what the input
-# is for alignment (typically either fragments of fixed size, or the most 
+# is for alignment (typically either fragments of fixed size, or the most
 # complete assembly available).
 #
 # ANIm: uses MUMmer (NUCmer) to align the input sequences.
 # ANIb: uses BLASTN to align 1000nt fragments of the input sequences
 # TETRA: calculates tetranucleotide frequencies of each input sequence
 #
-# This script takes as input a directory containing a set of 
-# correctly-formatted FASTA multiple sequence files. All sequences for a 
+# This script takes as input a directory containing a set of
+# correctly-formatted FASTA multiple sequence files. All sequences for a
 # single organism should be contained in only one sequence file. The names of
-# these files are used for identification, so it would be advisable to name 
+# these files are used for identification, so it would be advisable to name
 # them sensibly.
 #
 # Output is written to a named directory. The output files differ depending on
 # the chosen ANI method.
 #
-# ANIm: MUMmer/NUCmer .delta files, describing the sequence 
+# ANIm: MUMmer/NUCmer .delta files, describing the sequence
 #       alignment; tab-separated format plain text tables describing total
 #       alignment lengths, and total alignment percentage identity
 #
-# ANIb: FASTA sequences describing 1000nt fragments of each input sequence; 
-#       BLAST nucleotide databases - one for each set of fragments; and BLASTN 
-#       output files (tab-separated tabular format plain text) - one for each 
+# ANIb: FASTA sequences describing 1000nt fragments of each input sequence;
+#       BLAST nucleotide databases - one for each set of fragments; and BLASTN
+#       output files (tab-separated tabular format plain text) - one for each
 #       pairwise comparison of input sequences. There are potentially a lot of
 #       intermediate files.
 #
-# TETRA: Tab-separated text file describing the Z-scores for each 
+# TETRA: Tab-separated text file describing the Z-scores for each
 #        tetranucleotide in each input sequence.
 #
 # In addition, all methods produce a table of output percentage identity (ANIm
 # and ANIb) or correlation (TETRA), between each sequence.
 #
-# If graphical output is chosen, the output directory will also contain PDF 
-# files representing the similarity between sequences as a heatmap with 
+# If graphical output is chosen, the output directory will also contain PDF
+# files representing the similarity between sequences as a heatmap with
 # row and column dendrograms.
 #
 # DEPENDENCIES
 # ============
-# 
+#
 # o Biopython (http://www.biopython.org)
 #
 # o BLAST+ executable in the $PATH, or available on the command line (ANIb)
@@ -86,7 +86,7 @@
 # =====
 #
 # calculate_ani.py [options]
-# 
+#
 # Options:
 #   -h, --help            show this help message and exit
 #   -o OUTDIRNAME, --outdir=OUTDIRNAME
@@ -157,19 +157,13 @@ import time
 import traceback
 import argparse
 
+import numpy as np
+
 try:
     from Bio import SeqIO
 except ImportError:
     print "Biopython required for script, but not found (exiting)"
     sys.exit(1)
-
-try:
-    import rpy2.robjects as robjects
-    rpy2_import = True
-except ImportError:
-    print "Could not import rpy2: graphical output " +\
-                       "and TETRA method not available"
-    rpy2_import = False
 
 #=============
 # FUNCTIONS
@@ -178,65 +172,18 @@ except ImportError:
 def parse_cmdline():
     """ Parse command-line arguments for the script
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-o", "--outdir", dest="outdirname",
-                      action="store", default=None,
-                      help="Output directory")
-    parser.add_argument("infiles", nargs="+",
-                      help="input fasta files")
-    parser.add_argument("-v", "--verbose", dest="verbose",
-                      action="store_true", default=False,
-                      help="Give verbose output")
-    parser.add_argument("-f", "--force", dest="force",
-                      action="store_true", default=False,
-                      help="Force file overwriting")
-    parser.add_argument("-s", "--fragsize", dest="fragsize",
-                      default=1020,
-                      help="Sequence fragment size for ANIb")
-    parser.add_argument("-l", "--logfile", dest="logfile",
-                      action="store", default=None,
-                      help="Logfile location")
-    parser.add_argument("--skip_nucmer", dest="skip_nucmer",
-                      action="store_true", default=False,
-                      help="Skip NUCmer runs, for testing " +\
-                          "(e.g. if output already present)")
-    parser.add_argument("--skip_blast", dest="skip_blast",
-                      action="store_true", default=False,
-                      help="Skip BLAST runs, for testing " +\
-                          "(e.g. if output already present)")
-    parser.add_argument("--noclobber", dest="noclobber",
-                      action="store_true", default=False,
-                      help="Don't nuke existing files")
-    parser.add_argument("-g", "--graphics", dest="graphics",
-                      action="store_true", default=False,
-                      help="Generate heatmap of ANI")
-    parser.add_argument("--format", dest="gformat",
-                      action="store", default="pdf",
-                      help="Graphics output format [pdf|png|jpg]")
-    parser.add_argument("-m", "--method", dest="method",
-                      action="store", default="ANIm",
-                      help="ANI method [ANIm|ANIb|TETRA]")
-    parser.add_argument("--nucmer_exe", dest="nucmer_exe",
-                      action="store", default="nucmer",
-                      help="Path to NUCmer executable")    
-    parser.add_argument("--blast_exe", dest="blast_exe",
-                      action="store", default="blastn",
-                      help="Path to BLASTN+ executable")    
-    parser.add_argument("--makeblastdb_exe", dest="makeblastdb_exe",
-                      action="store", default="makeblastdb",
-                      help="Path to BLAST+ makeblastdb executable")    
-    return parser.parse_args()
+
 
 # Report last exception as string
 def last_exception():
     """ Returns last exception as a string, for use in logging.
     """
     exc_type, exc_value, exc_traceback = sys.exc_info()
-    return ''.join(traceback.format_exception(exc_type, exc_value, 
+    return ''.join(traceback.format_exception(exc_type, exc_value,
                                               exc_traceback))
 
 # METHOD: ANIm
-# This method uses NUCmer to calculate pairwise alignments for the input 
+# This method uses NUCmer to calculate pairwise alignments for the input
 # organisms, without chopping sequences into fragments. We follow the method
 # of Richter et al. (2009)
 def calculate_anim(infiles):
@@ -247,7 +194,7 @@ def calculate_anim(infiles):
         and similarity error count for every unique region alignment between
         the two organisms, as represented by the sequences in the FASTA files.
 
-        These are processed to give matrices of aligned sequence lengths, 
+        These are processed to give matrices of aligned sequence lengths,
         similarity error counts, average nucleotide identity (ANI) percentages,
         and minimum aligned percentage (of whole genome) for each pairwise
         comparison.
@@ -263,42 +210,45 @@ def calculate_anim(infiles):
     #    if v > 0.95:
     #        print k, v
     # Write output to file
-    write_table('aln_lengths.tab', org_lengths.keys(), lengths, 
+    write_table('aln_lengths.tab', org_lengths.keys(), lengths,
                 "Aligment lengths")
-    write_table('sim_errors.tab', org_lengths.keys(), sim_errors, 
+    write_table('sim_errors.tab', org_lengths.keys(), sim_errors,
                 "Similarity errors")
-    write_table('perc_ids.tab', org_lengths.keys(), perc_ids, 
-                "ANIm")
-    write_table('perc_aln.tab', org_lengths.keys(), perc_aln, 
-                "Minimum % aligned nt")
+
+    perc_ids, names = write_table('perc_ids.tab', org_lengths.keys(), perc_ids,
+                           "ANIm")
+    perc_aln, _ = write_table('perc_aln.tab', org_lengths.keys(), perc_aln,
+                           "Minimum % aligned nt")
+
+    return perc_ids, perc_aln, names
 
 # METHOD: ANIb
 # This method uses BLAST to calculate pairwise alignments for input organisms,
 # fragmented into consecutive 1020bp fragments, as described in Goris et al.
 # (2007).
 def calculate_anib(infiles):
-    """ Calculate ANI by the ANIb method, as described in Goris et al. (2007) 
+    """ Calculate ANI by the ANIb method, as described in Goris et al. (2007)
         Int J Syst Evol Micr 57: 81-91. doi:10.1099/ijs.0.64483-0.
 
         All FASTA format files (selected by suffix) in the input directory are
-        used to construct BLAST databases, placed in the output directory.  
+        used to construct BLAST databases, placed in the output directory.
         Each file's contents are also split into sequence fragments of length
-        options.fragsize, and the multiple FASTA file that results written to 
-        the output directory. These are BLASTNed, pairwise, against the 
+        options.fragsize, and the multiple FASTA file that results written to
+        the output directory. These are BLASTNed, pairwise, against the
         databases.
-        
-        The BLAST output is interrogated for all fragment matches that cover 
-        at least 70% of the query sequence, with at least 30% nucleotide 
+
+        The BLAST output is interrogated for all fragment matches that cover
+        at least 70% of the query sequence, with at least 30% nucleotide
         identity over the full length of the query sequence. This is an odd
         choice and doesn't correspond to the twilight zone limit as implied by
-        Goris et al. We persist with their definition, however.  Only these 
+        Goris et al. We persist with their definition, however.  Only these
         qualifying matches contribute to the total aligned length, and total
         aligned sequence identity used to calculate ANI.
 
         The results are processed to give matrices of aligned sequence length
         (aln_lengths.tab), similarity error counts (sim_errors.tab), ANIs
-        (perc_ids.tab), and minimum aligned percentage (perc_aln.tab) of 
-        each genome, for each pairwise comparison. These are written to the 
+        (perc_ids.tab), and minimum aligned percentage (perc_aln.tab) of
+        each genome, for each pairwise comparison. These are written to the
         output directory in plain text tab-separated format.
     """
     logger.info("Running ANIb method")
@@ -312,21 +262,23 @@ def calculate_anib(infiles):
         if v > 0.95:
             print k, v
     # Write output to file
-    write_table('aln_lengths.tab', org_lengths.keys(), lengths, 
+    write_table('aln_lengths.tab', org_lengths.keys(), lengths,
                 "Aligment lengths")
-    write_table('sim_errors.tab', org_lengths.keys(), sim_errors, 
+    write_table('sim_errors.tab', org_lengths.keys(), sim_errors,
                 "Similarity errors")
-    write_table('perc_ids.tab', org_lengths.keys(), perc_ids, 
-                "ANIm")
-    write_table('perc_aln.tab', org_lengths.keys(), perc_aln, 
-                "Minimum % aligned nt")    
+    perc_ids, names = write_table('perc_ids.tab', org_lengths.keys(), perc_ids,
+                           "ANIb")
+    perc_aln, _ = write_table('perc_aln.tab', org_lengths.keys(), perc_aln,
+                           "Minimum % aligned nt")
+
+    return perc_ids, perc_aln, names
 
 # METHOD: TETRA
 # This method calculates tetranucleotide frequencies for the input organisms,
 # as used by JSpecies, and described in Richter et al (2009) and Teeling et
 # al. (2004) and Teeling et al. (2004)
 def calculate_tetra(infiles):
-    """ Calculate tetranucleotide frequencies for each input sequence, and 
+    """ Calculate tetranucleotide frequencies for each input sequence, and
         their Pearson correlation, as described in Teeling et al. (2004a)
         Env. Micro. 6 938-947 doi:10.1111/j.1462-2920.2004.00624.x;
         Teeling et al. (2004b) BMC Bioinf. 5 163 doi:10.1186/1471-2105-5-163;
@@ -334,10 +286,10 @@ def calculate_tetra(infiles):
         doi:10.1073/pnas.0906412106.
 
         FASTA format files (selected by suffix) in the input directory are used
-        to construct frequency tables of tetranucleotide occurrence. These 
-        frequencies are converted into Z-scores, and tabulated 
-        (rows=tetranucleotides, columns=input sequences, written as 
-        tetra_z_scores.tab). The Pearson correlation between Z-scores for 
+        to construct frequency tables of tetranucleotide occurrence. These
+        frequencies are converted into Z-scores, and tabulated
+        (rows=tetranucleotides, columns=input sequences, written as
+        tetra_z_scores.tab). The Pearson correlation between Z-scores for
         input sequences is then used as a measure of sequence similarity and
         written to tetra_corr.tab.
     """
@@ -345,22 +297,22 @@ def calculate_tetra(infiles):
     tetra_z = calc_org_tetra(infiles)   # Calculate Z-scores for tetranucleotides
     write_tetraz('tetra_z_scores.tab', tetra_z)
     corr_z = calc_tetra_corr(tetra_z) # Calculate Pearson correlation
-    write_table('tetra_corr.tab', tetra_z.keys(), corr_z, 
+    write_table('tetra_corr.tab', tetra_z.keys(), corr_z,
                 "TETRA")
 
 
 # SUPPORT FUNCTIONS
-# Write the set of tetranucleotide frequency Z scores to a plain text 
+# Write the set of tetranucleotide frequency Z scores to a plain text
 # tab-separated table, in the output directory
 def write_tetraz(filename, tetra_z):
-    """ Writes the Z score for each tetranucleotide to a plain text 
+    """ Writes the Z score for each tetranucleotide to a plain text
         tab-separated table with one row for each tetranucleotide, and one
         column for each input sequence.
 
         - filename is the location of the file to which the tetranucleotide
               Z-scores should be written
 
-        - tetra_z is a dictionary containing the tetranucleotide Z-scores 
+        - tetra_z is a dictionary containing the tetranucleotide Z-scores
               for each input sequence
     """
     try:
@@ -385,13 +337,13 @@ def write_tetraz(filename, tetra_z):
 def calc_tetra_corr(tetra_z):
     """ Calculate Pearson correlation coefficient from Z scores for each
         tetranucleotide. This is done longhand here, which is fast enough,
-        but for robustness we might want to just hand this over to R, 
+        but for robustness we might want to just hand this over to R,
         as it is a dependency for this method anyway (TODO).
 
-        Note that we report a correlation by this method, rather than a 
+        Note that we report a correlation by this method, rather than a
         percentage identity.
 
-        - tetra_z is a dictionary of tetranucleotide Z-scores, for each 
+        - tetra_z is a dictionary of tetranucleotide Z-scores, for each
               input sequence
     """
     corrs = {}
@@ -417,7 +369,7 @@ def calc_tetra_corr(tetra_z):
 def calc_org_tetra(infiles):
     """ We calculate the mono-, di-, tri- and tetranucleotide frequencies
         for each sequence, on each strand, and follow Teeling et al. (2004)
-        in calculating a corresponding Z-score for each observed 
+        in calculating a corresponding Z-score for each observed
         tetranucleotide frequency, dependent on the mono-, di- and tri-
         nucleotide frequencies for that input sequence.
     """
@@ -432,15 +384,15 @@ def calc_org_tetra(infiles):
                                             collections.defaultdict(int),
                                             collections.defaultdict(int))
         for rec in SeqIO.parse(fn, 'fasta'):
-            for s in [str(rec.seq).upper(), 
+            for s in [str(rec.seq).upper(),
                       str(rec.seq.reverse_complement()).upper()]:
-                # Since the Teeling et al. algorithm requires us to consider 
+                # Since the Teeling et al. algorithm requires us to consider
                 # both strand orientations, monocounts are easy
                 monocnt['G'] += s.count('G')
                 monocnt['C'] += s.count('C')
                 monocnt['T'] += s.count('T')
                 monocnt['A'] += s.count('A')
-                # For di, tri and tetranucleotide counts, we loop over the 
+                # For di, tri and tetranucleotide counts, we loop over the
                 # sequence and its reverse complement, until we're near the end:
                 for i in range(len(s[:-4])):
                     di, tri, tetra = s[i:i+2], s[i:i+3], s[i:i+4]
@@ -455,20 +407,20 @@ def calc_org_tetra(infiles):
                 dicnt[str(s[-2:])] += 1
         logger.info("%d mono, %d di, %d tri, %d tetranucleotides found" %\
                         (len(monocnt), len(dicnt), len(tricnt), len(tetracnt)))
-        # Following Teeling (2004), we calculate expected frequencies for each 
+        # Following Teeling (2004), we calculate expected frequencies for each
         # tetranucleotide; we ignore ambiguity symbols
         tetra_exp = {}
         for t in [tet for tet in tetracnt if tet_clean(tet)]:
             tetra_exp[t] = 1.*tricnt[t[:3]]*tricnt[t[1:]]/dicnt[t[1:3]]
         logger.info("%d non-ambiguous tetranucleotides" % len(tetra_exp))
-        # Following Teeling (2004) we approximate the std dev of each 
+        # Following Teeling (2004) we approximate the std dev of each
         # tetranucleotide
         tetra_sd = {}
         for t, exp in tetra_exp.items():
             den = dicnt[t[1:3]]
             tetra_sd[t] = math.sqrt(exp * (den - tricnt[t[:3]]) * \
                                         (den - tricnt[t[1:]]) / (den * den))
-        # Following Teeling (2004) we calculate the Z-score for each 
+        # Following Teeling (2004) we calculate the Z-score for each
         # tetranucleotide
         tetra_z = {}
         for t, exp in tetra_exp.items():
@@ -489,7 +441,7 @@ def calc_org_tetra(infiles):
 
 # Returns true if the passed string contains only A, C, G or T
 def tet_clean(s):
-    """ Checks that a passed string contains only unambiguous IUPAC nucleotide 
+    """ Checks that a passed string contains only unambiguous IUPAC nucleotide
         symbols. We are assuming that a low frequency of IUPAC ambiguity symbols
         doesn't affect our calculation.
     """
@@ -501,7 +453,7 @@ def tet_clean(s):
 # Divide the input FASTA sequences into fragments, and place multiple sequence
 # FASTA files into the output directory
 def fragment_input_files(infiles):
-    """ Takes every sequence from every FASTA file in the input directory, 
+    """ Takes every sequence from every FASTA file in the input directory,
         splits them into consecutive fragments of length options.fragsize,
         (with any trailing sequences being included, even if shorter), and
         writes the resulting set of sequences to a file with the same name
@@ -527,7 +479,7 @@ def fragment_input_files(infiles):
 
 # Make BLAST databases for each of the fragmented input files
 def make_blast_dbs(infiles):
-    """ Use local makeblastdb to build BLAST a nucleotide database for each 
+    """ Use local makeblastdb to build BLAST a nucleotide database for each
         input sequence.
 
         For ANIb, the input sequence has been split into consecutive fragments.
@@ -539,7 +491,7 @@ def make_blast_dbs(infiles):
     logger.info("BLAST makeblastdb command lines:\n\t%s" % \
                     '\n\t'.join(cmdlines))
     multiprocessing_run(cmdlines)
-        
+
 
 # Get the list of FASTA files from the input directory
 def get_fasta_files():
@@ -568,10 +520,10 @@ def get_org_lengths(infiles):
             sum([len(s) for s in SeqIO.parse(fn, 'fasta')])
     return tot_lengths
 
-# Write a table of values to file, organised as a square matrix with row/col 
+# Write a table of values to file, organised as a square matrix with row/col
 # headers, in tab-separated format
 def write_table(filename, org_names, values, comment=''):
-    """ Writes a tab-separated plain text square matrix file, with row and 
+    """ Writes a tab-separated plain text square matrix file, with row and
         column headers, describing the passed data.
 
         - filename is the full path for the output file
@@ -596,38 +548,45 @@ def write_table(filename, org_names, values, comment=''):
         logger.error(last_exception())
         sys.exit(1)
     names = sorted(list(set(org_names))) # Set name order
+    matrix = []
     print >> fh, '\t'.join([''] + names)
     for n1 in names:
         outrow = [n1]
+        matrix_row = []
         for n2 in names:
             if n1 == n2:
                 outrow.append('NA')
+                matrix_row.append(0.0)
                 continue
             try:
                 val = values[(n1, n2)]
             except KeyError: # This error is not thrown for a square matrix
                 val = values[(n2, n1)]
+
+            matrix_row.append(val)
             outrow.append(str(val))
         print >> fh, '\t'.join(outrow)
+        matrix.append(matrix_row)
     logger.info("Wrote data to %s" % fname)
+    return np.array(matrix), names
 
 # Parse NUCmer delta output to store alignment total length, sim_error,
 # and percentage identity, for each pairwise comparison
 def process_delta(org_lengths):
-    """ Returns a tuple containing a list and four dictionaries. The list 
+    """ Returns a tuple containing a list and four dictionaries. The list
         describes the names of all organisms (derived from their filenames).
-        The dictionaries describe results for pairwise comparisons: total 
+        The dictionaries describe results for pairwise comparisons: total
         aligned lengths; similarity errors in those alignments; the percentage
-        of aligned length that matches (ANIm); and the percentage of the 
+        of aligned length that matches (ANIm); and the percentage of the
         pairwise comparison that is aligned.
 
         For the total aligned length, similarity error, and ANIm dictionaries,
-        as these are triangular/symmetrical matrices we only key them by 
+        as these are triangular/symmetrical matrices we only key them by
         (query, subject), but as the percentage aligned measure depends on the
-        sequence we calculate it against, we report (query, subject) and 
+        sequence we calculate it against, we report (query, subject) and
         (subject, query) values.
 
-        - org_lengths is a dictionary of total sequence lengths for each 
+        - org_lengths is a dictionary of total sequence lengths for each
               input sequence
     """
     infiles = get_input_files(options.outdirname, '.delta')
@@ -659,11 +618,11 @@ def process_delta(org_lengths):
 # Parse BLAST tabular output and store total alignment length, similarity
 # counts and percentage identity for each pairwise comparison
 def process_blast(org_lengths):
-    """ Read in the BLASTN comparison output files, and calculate alignment 
+    """ Read in the BLASTN comparison output files, and calculate alignment
         lengths, similarity errors, and percentage identity and alignment
         coverage for each input sequence comparison.
 
-        - org_lengths is a dictionary of total sequence lengths for each 
+        - org_lengths is a dictionary of total sequence lengths for each
               input sequence.
     """
     infiles = get_input_files(options.outdirname, '.blast_tab')
@@ -710,29 +669,29 @@ def parse_delta(filename):
             sim_errors += int(line[4])
     return aln_length, sim_errors
 
-# Parse custom BLASTN output to get total alignment length and mismatches 
+# Parse custom BLASTN output to get total alignment length and mismatches
 def parse_blast(filename):
     """ Calculate the alignment length and total number of similarity errors
         for the passed BLASTN alignment file generated by comparing fragmented
         input sequences.
 
-        - filename is the location of the BLASTN output for a pairwise 
+        - filename is the location of the BLASTN output for a pairwise
               comparison between input sequences
     """
     aln_length, sim_errors = 0, 0,
     qname, sname = \
         os.path.splitext(os.path.split(filename)[-1])[0].split('_vs_')
-    qalnlen, qnumid, qlen, qerr = (collections.defaultdict(float), 
+    qalnlen, qnumid, qlen, qerr = (collections.defaultdict(float),
                                    collections.defaultdict(float),
                                    collections.defaultdict(float),
                                    collections.defaultdict(float))
     for line in [l.strip().split() for l in open(filename, 'rU').readlines() \
                      if len(l) and not l.startswith('#')]:
-        # We need to collate matches by query ID, to determine whether the 
+        # We need to collate matches by query ID, to determine whether the
         # match has > 30% identity and > 70% coverage.
-        # Following Goris et al (2007) we only use matches that contribute to 
+        # Following Goris et al (2007) we only use matches that contribute to
         # a total match identity of at least 30% and a total match coverage
-        # of at least 70% of either query or reference length     
+        # of at least 70% of either query or reference length
         qid = line[0]
         qalnlen[qid] += int(line[2])
         qnumid[qid] += int(line[5])
@@ -747,8 +706,8 @@ def parse_blast(filename):
 
 # Run BLASTN pairwise on input files, using multiprocessing
 def pairwise_blast(filenames):
-    """ Run BLASTN for each pairwise comparison of fragmented input sequences, 
-        using multiprocessing to take advantage of multiple cores where 
+    """ Run BLASTN for each pairwise comparison of fragmented input sequences,
+        using multiprocessing to take advantage of multiple cores where
         possible, and writing results to the nominated output directory.
 
         - filenames is an iterable of locations of input FASTA files, from
@@ -771,14 +730,14 @@ def pairwise_blast(filenames):
 
 # Run NUCmer pairwise on the input files, using multiprocessing
 def pairwise_nucmer(filenames):
-    """ Run NUCmer to generate pairwise alignment data for each of the 
+    """ Run NUCmer to generate pairwise alignment data for each of the
         input FASTA files.
 
-        - filenames is a list of input FASTA filenames, from which NUCmer 
+        - filenames is a list of input FASTA filenames, from which NUCmer
               command lines are constructed
 
         We loop over all FASTA files in the input directory, generating NUCmer
-        command lines for each pairwise comparison, and then pass those 
+        command lines for each pairwise comparison, and then pass those
         command lines to be run using multiprocessing.
     """
     logger.info("Running pairwise NUCmer comparison to generate *.delta")
@@ -828,14 +787,14 @@ def logger_callback(val):
 
 # Construct a command-line for NUCmer
 def make_nucmer_cmd(f1, f2):
-    """ Construct a command-line for NUCmer pairwise comparison, and return as 
+    """ Construct a command-line for NUCmer pairwise comparison, and return as
         a string
 
         - f1, f2 are the locations of two input FASTA files for analysis
 
         We use the -mum option so that we consider matches that are unique in
-        both the reference and the query. -mumreference gives us matches 
-        unique only in the reference and -maxmatch gives us matches to all 
+        both the reference and the query. -mumreference gives us matches
+        unique only in the reference and -maxmatch gives us matches to all
         regions, regardless of uniqueness. We may want to make this an option.
     """
     prefix = os.path.join(options.outdirname, "%s_vs_%s" % \
@@ -872,7 +831,7 @@ def make_makeblastdb_cmd(filename):
         - filename is the location of the fragmented input FASTA sequence file,
               for constructing the database
     """
-    db_prefix = os.path.join(options.outdirname, 
+    db_prefix = os.path.join(options.outdirname,
                              os.path.split(os.path.splitext(filename)[0])[-1])
     cmd = "%s -out %s -dbtype nucl -in %s" % (options.makeblastdb_exe,
                                               db_prefix, filename)
@@ -881,25 +840,25 @@ def make_makeblastdb_cmd(filename):
 
 # Get list of FASTA files in a directory
 def get_input_files(dir, *ext):
-    """ Returns a list of files in the input directory with the passed 
+    """ Returns a list of files in the input directory with the passed
         extension
 
         - dir is the location of the directory containing the input files
-        
+
         - *ext is a list of arguments describing permissible file extensions
     """
     filelist = [f for f in os.listdir(dir) \
                     if os.path.splitext(f)[-1] in ext]
     return [os.path.join(dir, f) for f in filelist]
-    
+
 
 # Create output directory if it doesn't exist
 def make_outdir():
     """ Make the output directory, if required.
 
         This is a little involved.  If the output directory already exists,
-        we take the safe option by default, and stop with an error.  We can, 
-        however, choose to force the program to go on, in which case we can 
+        we take the safe option by default, and stop with an error.  We can,
+        however, choose to force the program to go on, in which case we can
         either clobber or not the existing directory.  The options turn out
         as the following, if the directory exists:
 
@@ -930,7 +889,67 @@ def make_outdir():
         else:
             logger.error(last_exception)
             sys.exit(1)
-        
+
+
+def make_heatmap(perc_ids, perc_aln, names, outfile='test.png', tree_file=None):
+    ''' Make a single heatmap using the percentage alignment and identity
+
+        Both of the matrixes are assumed to be 2-D and will be interleaved
+        into a single matrix for display.  The lower triangle of the perc_ids
+        will be merged with the upper triangle of the perc_aln. The lower and
+        upper triangles of this merged matrix will then be colored with
+        separate colormaps to make things look pretty.
+
+        perc_ids:   2-D numpy matrix containing the values from the write_table
+                    method
+        perc_aln:   2-D numpy matrix containing the values from the write_table
+                    method
+        names:      list of the names for each row and column in the matrix
+        outfile:    path to write output image to
+        tree_file:  file containing a newick tree used for ordering the rows
+                    and columns of the matrix
+    '''
+    try:
+        import matplotlib as mpl
+        import matplotlib.pyplot as plt
+        import matplotlib.cm as cm
+        import prettyplotlib as ppl
+        import pandas as pd
+    except ImportError:
+        print "you need to have matplotlib, pandas and prettyplotlib in your python path. "\
+                "exiting now without making heatmap"
+        return
+
+    merged = np.tril(perc_ids) + np.triu(perc_aln)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+
+    if tree_file is not None:
+        try:
+            from Bio import Phylo
+        except ImportError:
+            print "cannot import Bio.Phylo, will not reorder matrix based on tree file"
+        else:
+            merged_pd = pd.DataFrame(merged, index=names, columns=names)
+            tree = Phylo.read(tree_file, 'newick')
+            leaves = map(str, tree.get_terminals())
+            leaves.reverse()
+            merged_pd = merged_pd.loc[leaves, leaves]
+            merged = merged_pd.as_matrix()
+            names = leaves
+
+
+    mask_upper   = np.transpose(np.tri(merged.shape[0]))
+    mask_lower   = np.tri(merged.shape[0])
+    merged_lower = np.ma.masked_array(merged, mask=mask_lower)
+    merged_upper = np.ma.masked_array(merged, mask=mask_upper)
+
+    pa      = ppl.pcolormesh(fig, ax, merged_lower, xticklabels=names, yticklabels=names, xticklabels_rotation=45, cmap=cm.PRGn)
+    pb      = ppl.pcolormesh(fig, ax, merged_upper, cmap=cm.RdBu)
+    ax.set_xticklabels(names, rotation=45, ha='right')
+    plt.tight_layout()
+    fig.savefig(outfile)
 
 
 #=============
@@ -938,7 +957,51 @@ def make_outdir():
 
 if __name__ == '__main__':
 
-    options = parse_cmdline()
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("-o", "--outdir", dest="outdirname",
+                      action="store", default='./', required=True,
+                      help="Output directory")
+    parser.add_argument("infiles", nargs="+",
+                      help="input fasta files")
+    parser.add_argument("-v", "--verbose", dest="verbose",
+                      action="store_true", default=False,
+                      help="Give verbose output")
+    parser.add_argument("-f", "--force", dest="force",
+                      action="store_true", default=False,
+                      help="Force file overwriting")
+    parser.add_argument("-s", "--fragsize", dest="fragsize",
+                      default=1020,
+                      help="Sequence fragment size for ANIb")
+    parser.add_argument("-l", "--logfile", dest="logfile",
+                      action="store", default=None,
+                      help="Logfile location")
+    parser.add_argument('-t', '--tree', dest='tree', default=None,
+                      help='External phylogenetic tree that can be used to '\
+                           'order the rows and columns of the matrix')
+    parser.add_argument("--skip_nucmer", dest="skip_nucmer",
+                      action="store_true", default=False,
+                      help="Skip NUCmer runs, for testing " +\
+                          "(e.g. if output already present)")
+    parser.add_argument("--skip_blast", dest="skip_blast",
+                      action="store_true", default=False,
+                      help="Skip BLAST runs, for testing " +\
+                          "(e.g. if output already present)")
+    parser.add_argument("--noclobber", dest="noclobber",
+                      action="store_true", default=False,
+                      help="Don't nuke existing files")
+    parser.add_argument("-m", "--method", dest="method",
+                      choices=['ANIm', 'ANIb'], default="ANIm",
+                      help="ANI method")
+    parser.add_argument("--nucmer_exe", dest="nucmer_exe",
+                      action="store", default="nucmer",
+                      help="Path to NUCmer executable")
+    parser.add_argument("--blast_exe", dest="blast_exe",
+                      action="store", default="blastn",
+                      help="Path to BLASTN+ executable")
+    parser.add_argument("--makeblastdb_exe", dest="makeblastdb_exe",
+                      action="store", default="makeblastdb",
+                      help="Path to BLAST+ makeblastdb executable")
+    options = parser.parse_args()
 
     # We set up logging, and modify loglevel according to whether we need
     # verbosity or not
@@ -962,66 +1025,33 @@ if __name__ == '__main__':
     logger.addHandler(err_handler)
     logger.info('# calculate_ani.py logfile')
     logger.info('# Run: %s' % time.asctime())
- 
+
     # Report arguments, if verbose
     logger.info(options)
 
     # Have we got an input and output directory? If not, exit.
-    if options.infiles is None:
-        logger.error("No input files (exiting)")
-        sys.exit(1)
-    if options.outdirname is None:
-        logger.error("No output directory name (exiting)")
-        sys.exit(1)
+
     make_outdir()
     logger.info("Output directory: %s" % options.outdirname)
-    
+
 
     # Have we got a valid method choice?
     methods = {"ANIm": calculate_anim,
                "ANIb": calculate_anib,
-               "TETRA": calculate_tetra}
+               #"TETRA": calculate_tetra
+               }
     if options.method not in methods:
         logger.error("ANI method %s not recognised (exiting)" % options.method)
         logger.error("Valid methods are: %s" % methods.keys())
         sys.exit(1)
     logger.info("Using ANI method: %s" % options.method)
 
-    # Run method on the contents of the input directory, writing out 
+    # Run method on the contents of the input directory, writing out
     # to the named output directory
-    methods[options.method](options.infiles)
-    
+    perc_id, perc_aln, names = methods[options.method](options.infiles)
+
     # If graphics have been selected, use R to generate a heatmap of the ANI
     # scores from the perc_id.tab output
-    if options.graphics:
-        logger.info("Rendering heatmap with R")
-        if options.method == "TETRA":
-            filename = "tetra_corr.tab"
-        else:
-            filename = "perc_ids.tab"
-        if options.gformat.lower() not in ('pdf', 'png', 'jpg'):
-            options.gformat = 'pdf'
-        if not rpy2_import:
-            logger.error("No rpy2 module: graphics are unavailable")
-        else:
-            rstr = ["library(gplots)",
-                    "ani <- read.table('%s', " % \
-                        os.path.join(options.outdirname, filename) + \
-                        "header=T, sep='\\t', " +\
-                        "row.names=1)",
-                    "ani[] <- lapply(ani, function(x){replace(x, x == 0, NA)})",
-                    "%s('%s')" % \
-                       (options.gformat.lower(),
-                        os.path.join(options.outdirname, '%s.%s' % \
-                                 (options.method, options.gformat.lower() ))),
-                    "heatmap.2(as.matrix(ani), col=bluered, " +\
-                     "breaks=seq(min(0.9, max(ani[!is.na(ani)]))-0.01,1,0.001), " +\
-                     "margins=c(15,12), " +\
-                     "cexCol=1/log10(ncol(ani)), " +\
-                     "cexRow=1/log10(nrow(ani)), main='%s')" % \
-                      options.method,
-                    "dev.off()"]
-            rstr = '\n'.join(rstr)
-            logger.info("R command:\n%s" % rstr)
-            robjects.r(rstr)
-           
+    make_heatmap(perc_id, perc_aln, names, os.path.join(options.outdirname, 'heatmap.eps'))
+
+
