@@ -229,14 +229,16 @@ sub seg_main {
 
     my $one_fh = \*STDOUT;
     my $two_fh = \*STDOUT;
-    if ($options{'1'} eq $options{'2'}) {
-        $options{'paired'} = $options{'1'};
-        $options{'1'} = undef;
-        $options{'2'} = undef;
+    if (defined $options{'1'} and defined $options{'2'}) {
+        if ($options{'1'} eq $options{'2'}) {
+            $options{'paired'} = $options{'1'};
+            $options{'1'} = undef;
+            $options{'2'} = undef;
+        }
     }
 
     if (defined $options{'paired'} ) {
-        $one_fh = IO::File->new($options{'1'},'w') || die $!;
+        $one_fh = IO::File->new($options{'paired'},'w') || die "cannot write to ".$options{"paired"}.": $!";
         $two_fh = $one_fh;
     } 
     
@@ -265,13 +267,14 @@ sub seg_main {
     while (my $current_seq  = readfq($in_fh, \@aux)) {
         my ($name, $type, $direction) = determine_pairing_convention(\$current_seq);
         if ($type eq 'unk') {
-            warn "Cannot determine pairing convention for:$$current_seq->name\n";
+            warn "Cannot determine pairing convention for:".$current_seq->name."\n";
         }
         push @{$pairs_hash{$name}}, \$current_seq;
     }
     close $in_fh;
 
     # go through all the reads and determine which are paired and which are single
+    print "\n";
     while(my($k,$v) = each %pairs_hash) {
         my $number_of_reads = scalar @{$v};
         if($number_of_reads > 1) {

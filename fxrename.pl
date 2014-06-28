@@ -54,11 +54,11 @@ my $global_options = checkParams();
 my $dfh;
 if(scalar @ARGV >= 1) {
     if($global_options->{'gzip'}) {
-        $dfh = IO::Zlib->new($ARGV[0],"rb") || die $!;
+        $dfh = IO::Zlib->new($ARGV[0],"rb") || die "$!: $ARGV[0]";
     } elsif($global_options->{'bzip2'}){
-        $dfh = IO::Uncompress::Bunzip2->new($ARGV[0]) || die $!;
+        $dfh = IO::Uncompress::Bunzip2->new($ARGV[0]) || die "$!: $ARGV[0]";
     }else {
-       $dfh = IO::File->new($ARGV[0], 'r') || die $!;
+       $dfh = IO::File->new($ARGV[0], 'r') || die "$!: $ARGV[0]";
     }
 } else {
     $dfh = \*STDIN;

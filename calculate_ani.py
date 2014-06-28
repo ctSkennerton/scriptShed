@@ -875,13 +875,18 @@ def make_heatmap(perc_ids, perc_aln, names, outfile='test.png', tree_file=None):
     '''
     try:
         import matplotlib as mpl
+        mpl.use('Agg')
         import matplotlib.pyplot as plt
         import matplotlib.cm as cm
+        from matplotlib.path import Path
+        import matplotlib.patches as patches
         import prettyplotlib as ppl
+        from prettyplotlib import brewer2mpl as b2mpl
         import pandas as pd
-    except ImportError:
+    except ImportError, e:
         print "you need to have matplotlib, pandas and prettyplotlib in "\
               "your python path. exiting now without making heatmap"
+        #print str(e)
         return
 
 
@@ -897,7 +902,6 @@ def make_heatmap(perc_ids, perc_aln, names, outfile='test.png', tree_file=None):
         else:
             ids_pd = pd.DataFrame(perc_ids, index=names, columns=names)
             aln_pd = pd.DataFrame(perc_aln, index=names, columns=names)
-
             tree = Phylo.read(tree_file, 'newick')
             leaves = map(str, tree.get_terminals())
             leaves.reverse()
@@ -906,27 +910,86 @@ def make_heatmap(perc_ids, perc_aln, names, outfile='test.png', tree_file=None):
             perc_ids = ids_pd.as_matrix()
             perc_aln = aln_pd.as_matrix()
             names = leaves
-        finally:
-            merged = np.tril(perc_ids) + np.triu(perc_aln)
-
     else:
-        merged = np.tril(perc_ids) + np.triu(perc_aln)
+        print "no tree file given will not reorder matrix"
+
+    merged = np.tril(perc_ids) + np.triu(perc_aln)
+
 
     mask_upper   = np.transpose(np.tri(merged.shape[0]))
     mask_lower   = np.tri(merged.shape[0])
     merged_lower = np.ma.masked_array(merged, mask=mask_lower)
     merged_upper = np.ma.masked_array(merged, mask=mask_upper)
 
-    pa      = ax.pcolormesh(merged_lower, cmap=cm.Blues)
-    pb      = ax.pcolormesh(merged_upper, cmap=cm.Greens)
-    ax.set_xticklabels(names, rotation=45, ha='center')
-    ax.set_yticklabels(names, va='bottom')
-    cba = plt.colorbar(pa, shrink=0.25)
-    cbb = plt.colorbar(pb, shrink=0.25)
+    pa      = ax.pcolormesh(merged_lower, cmap=b2mpl.get_map('Blues', 'sequential', 9).mpl_colormap)
+    pb      = ax.pcolormesh(merged_upper, cmap=b2mpl.get_map('Purples',
+                    'sequential', 9).mpl_colormap)
+
+    xticks = np.arange(0.5, merged.shape[1] + 0.5)
+    ax.set_xticks(xticks)
+    ax.set_xticklabels(names, rotation=45, ha='right')
+
+    yticks = np.arange(0.5, merged.shape[1] + 0.5)
+    ax.set_yticks(yticks)
+    ax.set_yticklabels(names)
+
+    spines = ['top', 'bottom', 'right', 'left', 'polar']
+    for spine in spines:
+        # The try/except is for polar coordinates, which only have a 'polar'
+        # spine and none of the others
+        try:
+            ax.spines[spine].set_visible(False)
+        except KeyError:
+            pass
+
+    x_pos = set(['top', 'bottom'])
+    y_pos = set(['left', 'right'])
+    xy_pos = [x_pos, y_pos]
+    xy_ax_names = ['xaxis', 'yaxis']
+
+    for ax_name, pos in zip(xy_ax_names, xy_pos):
+        axis = ax.__dict__[ax_name]
+        axis.set_ticks_position('none')
+
+    N = merged.shape[1]
+    verts = [
+            [0,1]
+            ]
+    verts.append([0, N])
+    for i in reversed(range(2, N+1)):
+        verts.append([i-1,i])
+        verts.append([i-1,i-1])
+    verts.append([0,1])
+    verts = np.array(verts)
+
+    codes = [
+            Path.MOVETO
+            ]
+    for i in range(len(verts)-2):
+        codes.append(Path.LINETO)
+    codes.append(Path.CLOSEPOLY)
+
+    verts1 = np.copy(verts)
+    verts1 = verts1[:,::-1]
+    verts1[:,0] = verts1[:,0]
+    verts1 = verts1
+
+    path = Path(verts, codes)
+
+    path2 = Path(verts1, codes)
+    patch = patches.PathPatch(path, lw=1, fc='none')
+    ax.add_patch(patch)
+    patch2 = patches.PathPatch(path2, lw=1, fc='none')
+    ax.add_patch(patch2)
+
+    cba = plt.colorbar(pa, orientation='horizontal')
+    cbb = plt.colorbar(pb, orientation='horizontal')
+    
     cba.ax.axes.tick_params(labelsize=8)
     cbb.ax.axes.tick_params(labelsize=8)
     cba.set_label('percent alignment', fontsize=8)
     cbb.set_label('percent identity', fontsize=8)
+
     plt.tight_layout()
     fig.savefig(outfile)
 
@@ -1034,4 +1097,4 @@ if __name__ == '__main__':
     # If graphics have been selected, use R to generate a heatmap of the ANI
     # scores from the perc_id.tab output
     make_heatmap(perc_id, perc_aln, names, os.path.join(options.outdirname,
-                'heatmap.eps'), tree_file=options.tree)
+        'heatmap.eps'), tree_file=options.tree)
