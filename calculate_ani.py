@@ -880,11 +880,10 @@ def make_heatmap(perc_ids, perc_aln, names, outfile='test.png', tree_file=None):
         import prettyplotlib as ppl
         import pandas as pd
     except ImportError:
-        print "you need to have matplotlib, pandas and prettyplotlib in your python path. "\
-                "exiting now without making heatmap"
+        print "you need to have matplotlib, pandas and prettyplotlib in "\
+              "your python path. exiting now without making heatmap"
         return
 
-    merged = np.tril(perc_ids) + np.triu(perc_aln)
 
     fig = plt.figure()
     ax = fig.add_subplot(111)
@@ -893,25 +892,41 @@ def make_heatmap(perc_ids, perc_aln, names, outfile='test.png', tree_file=None):
         try:
             from Bio import Phylo
         except ImportError:
-            print "cannot import Bio.Phylo, will not reorder matrix based on tree file"
+            print "cannot import Bio.Phylo, will not reorder matrix "\
+                  "based on tree file"
         else:
-            merged_pd = pd.DataFrame(merged, index=names, columns=names)
+            ids_pd = pd.DataFrame(perc_ids, index=names, columns=names)
+            aln_pd = pd.DataFrame(perc_aln, index=names, columns=names)
+
             tree = Phylo.read(tree_file, 'newick')
             leaves = map(str, tree.get_terminals())
             leaves.reverse()
-            merged_pd = merged_pd.loc[leaves, leaves]
-            merged = merged_pd.as_matrix()
+            ids_pd = ids_pd.loc[leaves, leaves]
+            aln_pd = aln_pd.loc[leaves, leaves]
+            perc_ids = ids_pd.as_matrix()
+            perc_aln = aln_pd.as_matrix()
             names = leaves
+        finally:
+            merged = np.tril(perc_ids) + np.triu(perc_aln)
 
+    else:
+        merged = np.tril(perc_ids) + np.triu(perc_aln)
 
     mask_upper   = np.transpose(np.tri(merged.shape[0]))
     mask_lower   = np.tri(merged.shape[0])
     merged_lower = np.ma.masked_array(merged, mask=mask_lower)
     merged_upper = np.ma.masked_array(merged, mask=mask_upper)
 
-    pa      = ppl.pcolormesh(fig, ax, merged_lower, xticklabels=names, yticklabels=names, xticklabels_rotation=45, cmap=cm.PRGn)
-    pb      = ppl.pcolormesh(fig, ax, merged_upper, cmap=cm.RdBu)
-    ax.set_xticklabels(names, rotation=45, ha='right')
+    pa      = ax.pcolormesh(merged_lower, cmap=cm.Blues)
+    pb      = ax.pcolormesh(merged_upper, cmap=cm.Greens)
+    ax.set_xticklabels(names, rotation=45, ha='center')
+    ax.set_yticklabels(names, va='bottom')
+    cba = plt.colorbar(pa, shrink=0.25)
+    cbb = plt.colorbar(pb, shrink=0.25)
+    cba.ax.axes.tick_params(labelsize=8)
+    cbb.ax.axes.tick_params(labelsize=8)
+    cba.set_label('percent alignment', fontsize=8)
+    cbb.set_label('percent identity', fontsize=8)
     plt.tight_layout()
     fig.savefig(outfile)
 
@@ -921,7 +936,9 @@ def make_heatmap(perc_ids, perc_aln, names, outfile='test.png', tree_file=None):
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(\
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
     parser.add_argument("-o", "--outdir", dest="outdirname",
                       action="store", default='./', required=True,
                       help="Output directory")
@@ -1016,6 +1033,5 @@ if __name__ == '__main__':
 
     # If graphics have been selected, use R to generate a heatmap of the ANI
     # scores from the perc_id.tab output
-    make_heatmap(perc_id, perc_aln, names, os.path.join(options.outdirname, 'heatmap.eps'))
-
-
+    make_heatmap(perc_id, perc_aln, names, os.path.join(options.outdirname,
+                'heatmap.eps'), tree_file=options.tree)
