@@ -880,6 +880,8 @@ def make_heatmap(perc_ids, perc_aln, names, outfile='test.png', tree_file=None):
         import matplotlib.cm as cm
         from matplotlib.path import Path
         import matplotlib.patches as patches
+        import matplotlib.gridspec as gridspec
+
         import prettyplotlib as ppl
         from prettyplotlib import brewer2mpl as b2mpl
         import pandas as pd
@@ -891,7 +893,14 @@ def make_heatmap(perc_ids, perc_aln, names, outfile='test.png', tree_file=None):
 
 
     fig = plt.figure()
-    ax = fig.add_subplot(111)
+
+    gs = gridspec.GridSpec(2, 2,
+                       height_ratios=[40,1]
+                       )
+    ax = plt.subplot(gs[0, :])
+    cba_ax = plt.subplot(gs[1,0])
+    cbb_ax = plt.subplot(gs[1,1])
+    #ax = fig.add_subplot(111)
 
     if tree_file is not None:
         try:
@@ -982,13 +991,13 @@ def make_heatmap(perc_ids, perc_aln, names, outfile='test.png', tree_file=None):
     patch2 = patches.PathPatch(path2, lw=1, fc='none')
     ax.add_patch(patch2)
 
-    cba = plt.colorbar(pa, orientation='horizontal')
-    cbb = plt.colorbar(pb, orientation='horizontal')
-    
+    cba = plt.colorbar(pa, orientation='horizontal', cax=cbb_ax)
+    cbb = plt.colorbar(pb, orientation='horizontal', cax=cba_ax)
+
     cba.ax.axes.tick_params(labelsize=8)
     cbb.ax.axes.tick_params(labelsize=8)
-    cba.set_label('percent alignment', fontsize=8)
-    cbb.set_label('percent identity', fontsize=8)
+    cba.set_label('Alignment Fraction', fontsize=10)
+    cbb.set_label('Identity Fraction', fontsize=10)
 
     plt.tight_layout()
     fig.savefig(outfile)
