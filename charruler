@@ -1,0 +1,54 @@
+#!/usr/bin/env perl
+use warnings;
+use strict;
+
+use Getopt::Long;
+my $help = 0;
+my $length = 80;
+unless (scalar @ARGV) {
+  usage();
+  exit 1;
+}
+GetOptions ("length|l=i" => \$length,
+            'help|h+' )    # numeric
+            or die("Error in command line arguments\n");
+
+if ($help) {
+  usage();
+  exit 1;
+}
+
+if ($length > 999) {
+  print "Can't go more than 999\n";
+  exit(2);
+}
+
+if ($length >= 100) {
+  print_rule(100);
+}
+if ($length >= 10) {
+  print_rule(10);
+}
+print_rule(1);
+
+while (<>) {
+  print;
+}
+
+sub print_rule {
+  my $step = shift;
+  for(my $i = 0; $i <= $length; $i++) {
+    if ($i % $step == 0) {
+      print substr($i/$step, -1);
+    } else {
+      print " ";
+    }
+  }
+  print "\n";
+
+}
+
+sub usage {
+    print "charruler [-l INT] <file>\n";
+    print "\t-l INT\tNumber of characters the ruler should be\n";
+}
