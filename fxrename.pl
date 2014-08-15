@@ -108,7 +108,6 @@ sub fastaCut {
     # Cut up a fasta sequence
     #
     my ($string, $line_wrap) = @_;
-    
     # wrap the line if need be
     if(0 != $line_wrap)
     {

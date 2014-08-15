@@ -878,60 +878,127 @@ def make_heatmap(perc_ids, perc_aln, names, outfile='test.png', tree_file=None):
         mpl.use('Agg')
         import matplotlib.pyplot as plt
         import matplotlib.cm as cm
+        from matplotlib.path import Path
+        import matplotlib.patches as patches
+        import matplotlib.gridspec as gridspec
+
         import prettyplotlib as ppl
         from prettyplotlib import brewer2mpl as b2mpl
         import pandas as pd
     except ImportError, e:
-        print "you need to have matplotlib, pandas and prettyplotlib in your python path. "\
-                "exiting now without making heatmap"
-        print str(e)
+        print "you need to have matplotlib, pandas and prettyplotlib in "\
+              "your python path. exiting now without making heatmap"
+        #print str(e)
         return
 
-    print pd.DataFrame(perc_ids, index=names, columns=names)
-    print pd.DataFrame(perc_aln, index=names, columns=names)
+
+    fig = plt.figure()
+
+    gs = gridspec.GridSpec(2, 2,
+                       height_ratios=[40,1]
+                       )
+    ax = plt.subplot(gs[0, :])
+    cba_ax = plt.subplot(gs[1,0])
+    cbb_ax = plt.subplot(gs[1,1])
+    #ax = fig.add_subplot(111)
 
     if tree_file is not None:
         try:
             from Bio import Phylo
         except ImportError:
-            print "cannot import Bio.Phylo, will not reorder matrix based on tree file"
+            print "cannot import Bio.Phylo, will not reorder matrix "\
+                  "based on tree file"
         else:
             ids_pd = pd.DataFrame(perc_ids, index=names, columns=names)
             aln_pd = pd.DataFrame(perc_aln, index=names, columns=names)
-            #merged_pd = pd.DataFrame(merged, index=names, columns=names)
             tree = Phylo.read(tree_file, 'newick')
             leaves = map(str, tree.get_terminals())
             leaves.reverse()
             ids_pd = ids_pd.loc[leaves, leaves]
             aln_pd = aln_pd.loc[leaves, leaves]
-            print ids_pd
-            print aln_pd
             perc_ids = ids_pd.as_matrix()
             perc_aln = aln_pd.as_matrix()
             names = leaves
     else:
-        print "no tree file given will not reorder branches"
+        print "no tree file given will not reorder matrix"
 
     merged = np.tril(perc_ids) + np.triu(perc_aln)
-    print pd.DataFrame(merged, index=names, columns=names)
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-
-
-    #print merged_pd
 
     mask_upper   = np.transpose(np.tri(merged.shape[0]))
     mask_lower   = np.tri(merged.shape[0])
     merged_lower = np.ma.masked_array(merged, mask=mask_lower)
     merged_upper = np.ma.masked_array(merged, mask=mask_upper)
 
-    pa      = ppl.pcolormesh(fig, ax, merged_lower, xticklabels=names,
-                    yticklabels=names, xticklabels_rotation=45,
-                    cmap=b2mpl.get_map('Blues', 'sequential', 9).mpl_colormap)
-    pb      = ppl.pcolormesh(fig, ax, merged_upper, cmap=b2mpl.get_map('Purples',
+    pa      = ax.pcolormesh(merged_lower, cmap=b2mpl.get_map('Blues', 'sequential', 9).mpl_colormap)
+    pb      = ax.pcolormesh(merged_upper, cmap=b2mpl.get_map('Purples',
                     'sequential', 9).mpl_colormap)
+
+    xticks = np.arange(0.5, merged.shape[1] + 0.5)
+    ax.set_xticks(xticks)
     ax.set_xticklabels(names, rotation=45, ha='right')
+
+    yticks = np.arange(0.5, merged.shape[1] + 0.5)
+    ax.set_yticks(yticks)
+    ax.set_yticklabels(names)
+
+    spines = ['top', 'bottom', 'right', 'left', 'polar']
+    for spine in spines:
+        # The try/except is for polar coordinates, which only have a 'polar'
+        # spine and none of the others
+        try:
+            ax.spines[spine].set_visible(False)
+        except KeyError:
+            pass
+
+    x_pos = set(['top', 'bottom'])
+    y_pos = set(['left', 'right'])
+    xy_pos = [x_pos, y_pos]
+    xy_ax_names = ['xaxis', 'yaxis']
+
+    for ax_name, pos in zip(xy_ax_names, xy_pos):
+        axis = ax.__dict__[ax_name]
+        axis.set_ticks_position('none')
+
+    N = merged.shape[1]
+    verts = [
+            [0,1]
+            ]
+    verts.append([0, N])
+    for i in reversed(range(2, N+1)):
+        verts.append([i-1,i])
+        verts.append([i-1,i-1])
+    verts.append([0,1])
+    verts = np.array(verts)
+
+    codes = [
+            Path.MOVETO
+            ]
+    for i in range(len(verts)-2):
+        codes.append(Path.LINETO)
+    codes.append(Path.CLOSEPOLY)
+
+    verts1 = np.copy(verts)
+    verts1 = verts1[:,::-1]
+    verts1[:,0] = verts1[:,0]
+    verts1 = verts1
+
+    path = Path(verts, codes)
+
+    path2 = Path(verts1, codes)
+    patch = patches.PathPatch(path, lw=1, fc='none')
+    ax.add_patch(patch)
+    patch2 = patches.PathPatch(path2, lw=1, fc='none')
+    ax.add_patch(patch2)
+
+    cba = plt.colorbar(pa, orientation='horizontal', cax=cbb_ax)
+    cbb = plt.colorbar(pb, orientation='horizontal', cax=cba_ax)
+
+    cba.ax.axes.tick_params(labelsize=8)
+    cbb.ax.axes.tick_params(labelsize=8)
+    cba.set_label('Alignment Fraction', fontsize=10)
+    cbb.set_label('Identity Fraction', fontsize=10)
+
     plt.tight_layout()
     fig.savefig(outfile)
 
@@ -941,7 +1008,9 @@ def make_heatmap(perc_ids, perc_aln, names, outfile='test.png', tree_file=None):
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(\
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
     parser.add_argument("-o", "--outdir", dest="outdirname",
                       action="store", default='./', required=True,
                       help="Output directory")
@@ -1038,5 +1107,3 @@ if __name__ == '__main__':
     # scores from the perc_id.tab output
     make_heatmap(perc_id, perc_aln, names, os.path.join(options.outdirname,
         'heatmap.eps'), tree_file=options.tree)
-
-
