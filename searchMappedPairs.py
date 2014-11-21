@@ -43,18 +43,18 @@ def getSubList(subFile):
 def findEndLinks(G, bamFile, contig, length, endLength=500):
     # get the links at the start of the reference
     for read in bamFile.fetch(contig, 1, endLength):
-        if checkLink(read, length, contig):
-            mate_contig = bamFile.getrname(alignedRead.mrnm)
+        if checkLink(bamFile, read, length, contig):
+            mate_contig = bamFile.getrname(read.mrnm)
             G.add_node(contig, length=length)
-            G.add_node(mate_contig, length=bamFile.lengths[alignedRead.mrnm])
+            G.add_node(mate_contig, length=bamFile.lengths[read.mrnm])
             addLink(G, contig, mate_contig)
 
     # now get oll of the links at the end of the reference
     for read in bamFile.fetch(contig, length - endLength, length):
-        if checkLink(read, length, contig):
-            mate_contig = bamFile.getrname(alignedRead.mrnm)
+        if checkLink(bamFile, read, length, contig):
+            mate_contig = bamFile.getrname(read.mrnm)
             G.add_node(contig, length=length)
-            G.add_node(mate_contig, length=bamFile.lengths[alignedRead.mrnm])
+            G.add_node(mate_contig, length=bamFile.lengths[read.mrnm])
             addLink(G, contig, mate_contig)
 
 
@@ -76,7 +76,7 @@ def addLink(G, contig, mate_contig):
 
 def checkLink(bamFile, read, length, contig):
     if isMated(read):
-        if hasMissingMates(read, contig):
+        if hasMissingMates(bamFile, read, contig):
             # mate is on a different contig
             return True
 
@@ -113,7 +113,7 @@ if __name__ =='__main__':
     parser.add_argument("bam", help="the name of the input bam file")
     parser.add_argument('outfile', help='Name of output file of graph in GML format')
 
-    parser.add_argument("-n","--numberLinks", type="int", dest="numOfLinks", default=3,
+    parser.add_argument("-n","--numberLinks", type=int, dest="numOfLinks", default=3,
         help="the number of links that two contigs must share for the links to even be considered 'real'")
     parser.add_argument('-m', '--min-contig-len', type=int, dest='minContigLen', default=500,
         help='The minimum length of the contig to be considered for adding links')
@@ -128,18 +128,13 @@ if __name__ =='__main__':
         sys.exit(1)
 
     G = nx.Graph()
-    for contig, length in zip(self.bamFile.references, bamFile.lengths):
-        findEndLinks(G, contig, length)
+    for contig, length in zip(bamFile.references, bamFile.lengths):
+        if length < args.minContigLen:
+            continue
 
-    # now subset the graph based on the node and edge conditions
+        findEndLinks(G, bamFile, contig, length)
 
-    # get a list of nodes less than he length cutoff
-    bad_nodes = []
-    for n,d in G.nodes(data=True):
-        if d['length'] < args.minContigLen:
-            bad_nodes.append(n)
-
-    G.remove_nodes_from(bad_nodes)
+    # now subset the graph based on the edge conditions
 
     SG = nx.Graph( [ (u,v,d) for u,v,d in G.edges(data=True) if d ['weight'] >= args.numOfLinks] )
 
