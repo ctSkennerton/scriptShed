@@ -146,11 +146,15 @@ def last_exception():
     return ''.join(traceback.format_exception(exc_type, exc_value,
                                               exc_traceback))
 
+def calculate_aaim(infiles):
+    return calculate_anim(infiles, prog=options.promer_exe)
+
+
 # METHOD: ANIm
 # This method uses NUCmer to calculate pairwise alignments for the input
 # organisms, without chopping sequences into fragments. We follow the method
 # of Richter et al. (2009)
-def calculate_anim(infiles):
+def calculate_anim(infiles, prog='nucmer'):
     """ Calculate ANI by the ANIm method, as described in Richter et al (2009)
         Proc Natl Acad Sci USA 106: 19126-19131 doi:10.1073/pnas.0906412106.
 
@@ -167,7 +171,7 @@ def calculate_anim(infiles):
     """
     logger.info("Running ANIm method")
     org_lengths = get_org_lengths(infiles)
-    pairwise_nucmer(infiles)
+    pairwise_nucmer(infiles, prog=prog)
     lengths, sim_errors, perc_ids, perc_aln = process_delta(org_lengths)
     # Sanity check print for organisms of same species
     #for k, v in sorted(perc_ids.items()):
@@ -669,7 +673,7 @@ def parse_blast(filename):
 
 
 # Run BLASTN pairwise on input files, using multiprocessing
-def pairwise_blast(filenames):
+def pairwise_blast(filenames, prog='blastn'):
     """ Run BLASTN for each pairwise comparison of fragmented input sequences,
         using multiprocessing to take advantage of multiple cores where
         possible, and writing results to the nominated output directory.
@@ -681,10 +685,10 @@ def pairwise_blast(filenames):
         BLASTN command line for each pairwise comparison, and then pass those
         command lines to be run using multiprocessing.
     """
-    logger.info("Running pairwise BLASTN to generate *.blast_tab")
+    logger.info("Running pairwise BLAST to generate *.blast_tab")
     cmdlines = []
     for idx, f1 in enumerate(filenames[:-1]):
-        cmdlines.extend([make_blast_cmd(f1, f2) \
+        cmdlines.extend([make_blast_cmd(f1, f2, prog=prog) \
                             for f2 in filenames[idx+1:]])
     logger.info("BLASTN command lines:\n\t%s" % '\n\t'.join(cmdlines))
     if not options.skip_blast:
@@ -693,7 +697,7 @@ def pairwise_blast(filenames):
         logger.warning("BLASTN run skipped!")
 
 # Run NUCmer pairwise on the input files, using multiprocessing
-def pairwise_nucmer(filenames):
+def pairwise_nucmer(filenames, prog='nucmer'):
     """ Run NUCmer to generate pairwise alignment data for each of the
         input FASTA files.
 
@@ -704,16 +708,16 @@ def pairwise_nucmer(filenames):
         command lines for each pairwise comparison, and then pass those
         command lines to be run using multiprocessing.
     """
-    logger.info("Running pairwise NUCmer comparison to generate *.delta")
+    logger.info("Running pairwise mumer comparison to generate *.delta")
     cmdlines = []
     for idx, f1 in enumerate(filenames[:-1]):
-        cmdlines.extend([make_nucmer_cmd(f1, f2) \
+        cmdlines.extend([make_nucmer_cmd(f1, f2, prog=prog) \
                             for f2 in filenames[idx+1:]])
-    logger.info("NUCmer command lines:\n\t%s" % '\n\t'.join(cmdlines))
+    logger.info("mummer command lines:\n\t%s" % '\n\t'.join(cmdlines))
     if not options.skip_nucmer:
         multiprocessing_run(cmdlines)
     else:
-        logger.warning("NUCmer run skipped!")
+        logger.warning("mummer run skipped!")
 
 
 # Run a set of command lines using multiprocessing
@@ -750,7 +754,7 @@ def logger_callback(val):
 
 
 # Construct a command-line for NUCmer
-def make_nucmer_cmd(f1, f2):
+def make_nucmer_cmd(f1, f2, prog='nucmer'):
     """ Construct a command-line for NUCmer pairwise comparison, and return as
         a string
 
@@ -764,11 +768,11 @@ def make_nucmer_cmd(f1, f2):
     prefix = os.path.join(options.outdirname, "%s_vs_%s" % \
                               (os.path.splitext(os.path.split(f1)[-1])[0],
                                os.path.splitext(os.path.split(f2)[-1])[0]))
-    cmd = "%s -mum -p %s %s %s" % (options.nucmer_exe, prefix, f1, f2)
+    cmd = "%s -mum -p %s %s %s" % (prog, prefix, f1, f2)
     return cmd
 
 # Construct a command-line for BLASTN
-def make_blast_cmd(f1, f2):
+def make_blast_cmd(f1, f2, prog='blastn'):
     """ Construct a BLASTN command line to conduct sequence comparison between
         two fragmented input sequences, for ANIb.
 
@@ -779,7 +783,7 @@ def make_blast_cmd(f1, f2):
                                os.path.splitext(os.path.split(f2)[-1])[0]))
     blastdb = os.path.splitext(f2)[0]
     cmd = "%s -out %s.blast_tab -query %s -db %s " % \
-        (options.blast_exe, prefix, f1, blastdb) + \
+        (prog, prefix, f1, blastdb) + \
         "-xdrop_gap_final 150 -penalty -1 -dust no " +\
         "-max_target_seqs 1 -outfmt '6 qseqid sseqid length mismatch " +\
         "pident nident qlen slen qstart qend sstart send positive " +\
@@ -788,7 +792,7 @@ def make_blast_cmd(f1, f2):
     return cmd
 
 # Construct a command line for BLAST makeblastdb
-def make_makeblastdb_cmd(filename):
+def make_makeblastdb_cmd(filename, dbtype='nucl'):
     """ Construct a makeblastdb command line to make a BLAST nucleotide database
         from the passed fragmented input sequence FASTA file.
 
@@ -797,8 +801,8 @@ def make_makeblastdb_cmd(filename):
     """
     db_prefix = os.path.join(options.outdirname,
                              os.path.split(os.path.splitext(filename)[0])[-1])
-    cmd = "%s -out %s -dbtype nucl -in %s" % (options.makeblastdb_exe,
-                                              db_prefix, filename)
+    cmd = "%s -out %s -dbtype %s -in %s" % (options.makeblastdb_exe,
+                                              db_prefix, dbtype, filename)
     return cmd
 
 
@@ -883,10 +887,10 @@ def make_heatmap(perc_ids, perc_aln, names, outfile='test.png', tree_file=None):
         import matplotlib.gridspec as gridspec
 
         import prettyplotlib as ppl
-        from prettyplotlib import brewer2mpl as b2mpl
+        import brewer2mpl as b2mpl
         import pandas as pd
     except ImportError, e:
-        print "you need to have matplotlib, pandas and prettyplotlib in "\
+        print "you need to have matplotlib, pandas and brewer2mpl in "\
               "your python path. exiting now without making heatmap"
         #print str(e)
         return
@@ -930,7 +934,8 @@ def make_heatmap(perc_ids, perc_aln, names, outfile='test.png', tree_file=None):
     merged_lower = np.ma.masked_array(merged, mask=mask_lower)
     merged_upper = np.ma.masked_array(merged, mask=mask_upper)
 
-    pa      = ax.pcolormesh(merged_lower, cmap=b2mpl.get_map('Blues', 'sequential', 9).mpl_colormap)
+    pa      = ax.pcolormesh(merged_lower, cmap=b2mpl.get_map('Blues',
+                    'sequential', 9).mpl_colormap)
     pb      = ax.pcolormesh(merged_upper, cmap=b2mpl.get_map('Purples',
                     'sequential', 9).mpl_colormap)
 
@@ -1043,14 +1048,17 @@ if __name__ == '__main__':
                       action="store_true", default=False,
                       help="Don't nuke existing files")
     parser.add_argument("-m", "--method", dest="method",
-                      choices=['ANIm', 'ANIb'], default="ANIm",
+                      choices=['ANIm', 'ANIb', 'AAIm'], default="ANIm",
                       help="ANI method")
     parser.add_argument("--nucmer_exe", dest="nucmer_exe",
                       action="store", default="nucmer",
                       help="Path to NUCmer executable")
+    parser.add_argument("--promer_exe", dest="promer_exe",
+                      action="store", default="promer",
+                      help="Path to PROmer executable")
     parser.add_argument("--blast_exe", dest="blast_exe",
                       action="store", default="blastn",
-                      help="Path to BLASTN+ executable")
+                      help="Path to BLAST+ executable")
     parser.add_argument("--makeblastdb_exe", dest="makeblastdb_exe",
                       action="store", default="makeblastdb",
                       help="Path to BLAST+ makeblastdb executable")
@@ -1091,6 +1099,7 @@ if __name__ == '__main__':
     # Have we got a valid method choice?
     methods = {"ANIm": calculate_anim,
                "ANIb": calculate_anib,
+               "AAIm": calculate_aaim,
                #"TETRA": calculate_tetra
                }
     if options.method not in methods:
