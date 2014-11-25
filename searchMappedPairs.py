@@ -34,10 +34,9 @@ from operator import itemgetter
 
 
 def getSubList(subFile):
-    f = open(subFile, 'r')
-    subList = []
-    for line in f:
-        subList.append(line.rstrip())
+    subList = set()
+    for line in subFile:
+        subList.add(line.rstrip())
     return subList
 
 def findEndLinks(G, bamFile, contig, length, endLength=500):
@@ -112,15 +111,21 @@ if __name__ =='__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("bam", help="the name of the input bam file")
     parser.add_argument('outfile', help='Name of output file of graph in GML format')
-
+    parser.add_argument('-f', '--wanted-contigs', dest='wantedContigs', type=argparse.FileType(),
+            help='A file of contig names to be considered')
     parser.add_argument("-n","--numberLinks", type=int, dest="numOfLinks", default=3,
-        help="the number of links that two contigs must share for the links to even be considered 'real'")
+            help="the number of links that two contigs must share for the links to even be considered 'real'")
     parser.add_argument('-m', '--min-contig-len', type=int, dest='minContigLen', default=500,
-        help='The minimum length of the contig to be considered for adding links')
+            help='The minimum length of the contig to be considered for adding links')
 
     # get and check options
     args = parser.parse_args()
+
     endLength = 500
+    sublist = None
+    if args.wantedContigs is not None:
+        sublist = getSubList(args.wantedContigs)
+
     try:
         bamFile = pysam.Samfile(args.bam, 'rb')
     except:
@@ -129,7 +134,11 @@ if __name__ =='__main__':
 
     G = nx.Graph()
     for contig, length in zip(bamFile.references, bamFile.lengths):
+
         if length < args.minContigLen:
+            continue
+
+        if contig not in sublist:
             continue
 
         findEndLinks(G, bamFile, contig, length)
