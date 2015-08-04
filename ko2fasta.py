@@ -4,6 +4,7 @@ import requests
 import argparse
 import itertools
 import StringIO
+import sys
 
 def grouper(n, iterable):
     it = iter(iterable)
@@ -17,6 +18,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Given a list of kegg orthology identifiers, '\
             'will query the kegg server and download all genes in kegg that have that KO')
     parser.add_argument('-n', '--ntseq', help='download as nucleotide sequences, the default is protein sequences')
+    parser.add_argument('-o', '--outfile', default=None, help='write records to file. Default: stdout')
     parser.add_argument('ko', nargs='+', help='List of kegg orthology identifiers to download')
     args = parser.parse_args()
 
@@ -34,8 +36,13 @@ if __name__ == '__main__':
             ko_id, gene = line.rstrip().split()
             genes.append(gene)
 
+        if args.outfile is not None:
+            outfp = open(args.outfile, 'w')
+        else:
+            outfp = sys.stdout
+
         for j in grouper(10, genes):
             gene_request = '+'.join(j)
             r = requests.get(ko_get+gene_request+seqtype)
-            print(r.text, end='')
+            print(r.text, end='', file=outfp)
 

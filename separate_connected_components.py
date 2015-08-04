@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 ###############################################################################
 #
-# separate_connected_components 
+# separate_connected_components
 #
 ###############################################################################
 #                                                                             #
@@ -39,7 +39,7 @@ import networkx as nx
 #import errno
 
 #import numpy as np
-#np.seterr(all='raise')     
+#np.seterr(all='raise')
 
 #import matplotlib as mpl
 #import matplotlib.pyplot as plt
@@ -82,19 +82,18 @@ def doWork( args ):
 
 if __name__ == '__main__':
 
-    
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('infile', help="graph file in gexf format for"
-            " partiitioning")
-    parser.add_argument('outdir', nargs='?', 
+    parser.add_argument('infile', help="graph file for partiitioning")
+    parser.add_argument('outdir', nargs='?',
             help="output directory name for separated components.  If not given"
             " the current directory will be used.")
     #parser.add_argument('positional_arg3', nargs='+', help="Multiple values")
-    parser.add_argument('-f', '--format', default='gexf', help="format of the
-            graph: gexf, gml")
-    
+    parser.add_argument('-f', '--format', default='gexf', help="format of the"
+            " graph: gexf, gml")
+
     # parse the arguments
-    args = parser.parse_args()        
+    args = parser.parse_args()
 
     # do what we came here to do
     doWork(args)

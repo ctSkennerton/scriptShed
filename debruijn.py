@@ -101,6 +101,10 @@ def consume_reads(graph, fastaFile, readFormat, k, countMax):
         for i in range(len(record.seq) - k):
             kmer = str(record.seq[i:i+k])
             graph.add_node(kmer)
+            try:
+                graph.node[kmer]['coverage'] += 1
+            except KeyError:
+                graph.node[kmer]['coverage'] = 1
             if prev_kmer is not None:
                 graph.add_edge(prev_kmer, kmer)
 
@@ -113,7 +117,7 @@ if __name__ == '__main__':
     parser.add_argument('-i', '--infile', type=argparse.FileType(),
             help="input fasta file to generate debruijn graph from")
     parser.add_argument('-o', '--outfile',
-            help='Output file for generating gexf file of graph')
+            help='Output file for generating gml file of graph')
     parser.add_argument('-f', '--format',
             help='input read format', default='fasta')
     parser.add_argument('-k', '--kmer', action=CheckOdd, default=63,
@@ -127,4 +131,4 @@ if __name__ == '__main__':
     consume_reads(G, args.infile, args.format, args.kmer, args.max)
     if args.collapse:
         collapse_linear_paths(G)
-    nx.write_gexf(G, args.outfile)
+    nx.write_gml(G, args.outfile)
