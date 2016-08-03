@@ -72,6 +72,7 @@ if (scalar @ARGV >= 2) {
 }
 
 my @aux = undef;
+my $counter = 1;
 while (my $seq = readfq($dfh, \@aux)) 
 {
     my $modified_name = $seq->name();
@@ -85,8 +86,12 @@ while (my $seq = readfq($dfh, \@aux))
     if(defined $global_options->{prefix}) {
         $modified_name = $global_options->{prefix}.$modified_name;
     }
+    if(defined $global_options->{counter}) {
+       $modified_name .= $counter; 
+    }
     $seq->name($modified_name);
     print_seq(\$seq, $ofp);
+    $counter++;
 }
 ######################################################################
 # CUSTOM SUBS
@@ -198,7 +203,7 @@ sub checkParams {
     #-----
     # Do any and all options checking here...
     #
-    my @standard_options = ( "help|h+", "prefix=s", "suffix=s", "regex|r=s", "comment|c+", "wrap|w:i", "gzip|z+", "bzip2|j+");
+    my @standard_options = ( "help|h+", "prefix=s", "suffix=s", "regex|r=s", "counter+", "comment+", "wrap|w:i", "gzip|z+", "bzip2|j+");
     my %options;
 
     # Add any other command line options, and the code to handle them
@@ -289,7 +294,7 @@ __DATA__
 
 =head1 COPYRIGHT
 
-   copyright (C) 2013 uqcskenn
+   copyright (C) 2013,2016 Connor Skennerton
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -310,12 +315,12 @@ __DATA__
 
 =head1 SYNOPSIS
 
-    fxrename  [options] -regex|r REGEX <file.fx>...
-    fxrename [options] [-prefix STR] [-suffix STR] <file.fx>...
+    fxrename [-regex|r REGEX] [-counter] [-prefix STR] [-suffix STR] <file.fx>...
 
       [-help -h]                   Displays basic usage information
       -r REGEX                     perl regular expression to be run over the sequence identifiers
       -suffix STR                  A string to be appended to the identifier
       -prefix STR                  A string to be prepended to the identifier
+      -counter                     Append an incrementing number to the end of the identifier
 =cut
 
