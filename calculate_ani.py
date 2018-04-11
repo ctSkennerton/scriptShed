@@ -131,7 +131,7 @@ import numpy as np
 try:
     from Bio import SeqIO
 except ImportError:
-    print "Biopython required for script, but not found (exiting)"
+    print("Biopython required for script, but not found (exiting)")
     sys.exit(1)
 
 #=============
@@ -228,7 +228,7 @@ def calculate_anib(infiles):
     # Sanity check print for organisms of same species
     for k, v in sorted(perc_ids.items()):
         if v > 0.95:
-            print k, v
+            print(k, v)
     # Write output to file
     write_table('aln_lengths.tab', org_lengths.keys(), lengths,
                 "Aligment lengths")
@@ -292,12 +292,12 @@ def write_tetraz(filename, tetra_z):
     orgs = sorted(tetra_z.keys())
     tets = sorted(tetra_z.values()[0].keys())
     # Write headers
-    print >> fh, "# calculate_ani.py %s" % time.asctime()
-    print >> fh, "# tetranucleotide frequency Z-scores"
-    print >> fh, '\t' + '\t'.join(orgs)
+    print( "# calculate_ani.py %s" % time.asctime(), file=fh)
+    print( "# tetranucleotide frequency Z-scores", file=fh)
+    print( '\t' + '\t'.join(orgs), file=fh)
     for tet in tets:
         outstr = [tet] + ["%.2f" % tetra_z[org][tet] for org in orgs]
-        print >> fh, '\t'.join(outstr)
+        print( '\t'.join(outstr), file=fh)
     fh.close()
 
 # Calculate Pearson's correlation coefficient from the Z-scores for each
@@ -508,16 +508,16 @@ def write_table(filename, org_names, values, comment=''):
     try:
         logger.info("Opening %s for writing" % fname)
         fh = open(fname, 'w')
-        print >> fh, "# calculate_ani.py %s" % time.asctime()
+        print( "# calculate_ani.py %s" % time.asctime(), file=fh)
         if len(comment):
-            print >> fh, "# %s" % comment
+            print( "# %s" % comment, file=fh)
     except:
         logger.error("Could not open file %s for output (exiting)" % fname)
         logger.error(last_exception())
         sys.exit(1)
     names = sorted(list(set(org_names))) # Set name order
     matrix = []
-    print >> fh, '\t'.join([''] + names)
+    print( '\t'.join([''] + names),file=fh)
     for n1 in names:
         outrow = [n1]
         matrix_row = []
@@ -533,7 +533,7 @@ def write_table(filename, org_names, values, comment=''):
 
             matrix_row.append(val)
             outrow.append(str(val))
-        print >> fh, '\t'.join(outrow)
+        print( '\t'.join(outrow), file=fh)
         matrix.append(matrix_row)
     logger.info("Wrote data to %s" % fname)
     return np.array(matrix), names
@@ -889,9 +889,9 @@ def make_heatmap(perc_ids, perc_aln, names, outfile='test.png', tree_file=None):
         import prettyplotlib as ppl
         import brewer2mpl as b2mpl
         import pandas as pd
-    except ImportError, e:
-        print "you need to have matplotlib, pandas and brewer2mpl in "\
-              "your python path. exiting now without making heatmap"
+    except ImportError as e:
+        print("you need to have matplotlib, pandas and brewer2mpl in "\
+              "your python path. exiting now without making heatmap")
         #print str(e)
         return
 
@@ -910,8 +910,8 @@ def make_heatmap(perc_ids, perc_aln, names, outfile='test.png', tree_file=None):
         try:
             from Bio import Phylo
         except ImportError:
-            print "cannot import Bio.Phylo, will not reorder matrix "\
-                  "based on tree file"
+            print("cannot import Bio.Phylo, will not reorder matrix "\
+                  "based on tree file")
         else:
             ids_pd = pd.DataFrame(perc_ids, index=names, columns=names)
             aln_pd = pd.DataFrame(perc_aln, index=names, columns=names)
@@ -924,7 +924,7 @@ def make_heatmap(perc_ids, perc_aln, names, outfile='test.png', tree_file=None):
             perc_aln = aln_pd.as_matrix()
             names = leaves
     else:
-        print "no tree file given will not reorder matrix"
+        print("no tree file given will not reorder matrix")
 
     merged = np.tril(perc_ids) + np.triu(perc_aln)
 

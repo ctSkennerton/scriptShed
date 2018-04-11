@@ -1,5 +1,45 @@
 #!/bin/bash
-for i in "$@"; do
-    echo -ne "$i\t";
-    bioawk -c fastx 'END{print NR}' "$i"
+
+function process_file {
+    count=$(gunzip -c "$1" | wc -l  | awk '{print $1/4}')
+    echo -e "$1\t$count";
+}
+function show_help {
+    echo "fqcount [-t INT] <file>..."
+    echo "  -t  INT     Number of CPUs to use (requires GNU parallel be installed)"
+}
+
+export -f process_file
+
+# A POSIX variable
+OPTIND=1         # Reset in case getopts has been used previously in the shell.
+
+# Initialize our own variables:
+threads=1
+
+while getopts "h?t:" opt; do
+    case "$opt" in
+        h|\?)
+        show_help
+        exit 0
+        ;;
+        t)  threads=$OPTARG
+        ;;
+    esac
 done
+
+shift $((OPTIND-1))
+if [ $# -eq 0 ]; then
+    echo "No input files"
+    show_help
+    exit 0
+fi
+if [ $threads -gt 1 ]; then
+    # make sure parallel is in the path, if not fall back to single threaded
+    command -v parallel >/dev/null 2>&1 || { echo >&2 "could not find parallel in PATH (may not be installed).Failing back to single threaded mode."; threads=1; }
+fi
+if [ $threads -eq 1 ]; then
+    for file in "$@"; do process_file "$file"; done
+else
+    parallel -j $threads process_file {} ::: "$@"
+fi

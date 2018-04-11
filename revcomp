@@ -1,9 +1,6 @@
 #!/bin/bash
 if [ -e $1 ]; then
-    while read line
-    do
-        echo -n $line | perl -ne 'tr/ACTGactg/TGACtgac/;print scalar reverse;print "\n";'
-    done < $1
+    perl -ne 'tr/ACTGactg/TGACtgac/;print scalar reverse;print "\n";' $1
 else
     echo -n $1 | perl -ne 'tr/ACTGactg/TGACtgac/;print scalar reverse;print "\n";'
 fi

@@ -1,0 +1,16 @@
+#!/usr/bin/env perl
+use warnings;
+use strict;
+if($ARGV[0] eq '-h' || $ARGV[0] eq '--help') {
+    print "Usage:\n";
+    print "\tesom_train <infile>\n";
+    exit 1;
+}
+open my $infile, '<', $ARGV[0] || die $!;
+my $line = <$infile>;
+my $count = substr($line,1);
+$count *=5.5;
+$count /=0.61;
+my $columns = int(sqrt $count);
+my $rows = int($columns * 0.61);
+system("esomtrn -c $columns -r $rows -a kbatch -k 0.15 -rs 25 -l $ARGV[0]")

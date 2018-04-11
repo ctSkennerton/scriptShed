@@ -1,15 +1,29 @@
 #!/bin/bash
 view_F=0
 view_f=0
-while getopts "F:f:" opt; do
+sort_threads=1
+usage() {
+    echo "Pipeline to convert a sam file to a sorted and indexed bam file."
+    echo "Usage:"
+    echo "sam2bam [options] <file.sam>..."
+    echo "-F            same as the samtools view -F option (default: 0)"
+    echo "-f            same as the samtools view -f option (default: 0)"
+    echo "-t            threads to use in samtools sort (default: 1)"
+    exit
+}
+while getopts "F:f:t:h" opt; do
     case $opt in
         F)
             view_F=$OPTARG;;
         f)
             view_f=$OPTARG;;
+        t)
+            sort_threads=$OPTARG;;
+        h)
+            usage;;
     esac
 done
 shift $((OPTIND-1))
 for var in "$@"; do
-samtools view -Sub -f $view_f -F $view_F $var | samtools sort - ${var%.sam} && samtools index ${var%.sam}".bam"
+samtools view -Sub -f $view_f -F $view_F $var | samtools sort -@ $sort_threads -O bam -T ${var%.sam} -o ${var%sam}bam && samtools index ${var%sam}bam
 done

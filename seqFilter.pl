@@ -123,19 +123,11 @@ if(defined $ARGV{'--longest'}) {
 if( exists $ARGV{"-a"} | exists $ARGV{'-A'}) 
 {
     my $prefix = sprintf("%s%d\t", (exists $ARGV{'-H'}) ? $ARGV{'-i'}."\t" : "", $seq_count);
-    if ($seq_count > 1) {
-        my $n50 = $total_base / ($seq_count / 2);
-        if($ARGV{'-h'}) {
-            printf "%s%s\t%s\t%s\n", $prefix,human_output($total_base), human_output($total_base / $seq_count), human_output($n50);
-        } else {
-            printf "%s%s\t%.2f\t%.2f\n", $prefix,$total_base,$total_base / $seq_count,$n50;
-        }
+    my $n50 = $total_base / ($seq_count / 2);
+    if($ARGV{'-h'}) {
+        printf "%s%s\t%s\t%s\t%.4f\n", $prefix,human_output($total_base), human_output($total_base / $seq_count), human_output($n50), $total_gc / $seq_count;
     } else {
-        if($ARGV{'-h'}) {
-            printf "%s%s\tNA\tNA\n", $prefix, human_output($total_base);
-        } else {
-            printf "%s%s\tNA\tNA\n", $prefix, $total_base;
-        }
+        printf "%s%s\t%.2f\t%.2f\t%.4f\n", $prefix,$total_base,$total_base / $seq_count, $n50, $total_gc / $seq_count;
     }
 }
 

@@ -6,7 +6,7 @@ use Bio::SeqIO;
  
 my $verbose = 0;
  
-unless ( defined $ARGV[0]){ die "Usage: $0 <file.gff> <file.fa> \n";}  
+unless ( defined $ARGV[0]){ die "Usage: $0 <file.gff> <file.fa> <KEY> (eg. CDS)\n";}  
  
 ## read in gff
  
@@ -20,7 +20,7 @@ open (GFF, '<', $ARGV[0])
 while(<GFF>){
   my ($seqid, undef, $feattype, $start, $end,
       undef, undef, undef, $attrs) = split;
-  if ($feattype eq "CDS") {
+  if ($feattype eq $ARGV[2]) {
       push @{$gff{$seqid}}, [$start, $end, $attrs];
   }
 }
