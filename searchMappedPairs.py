@@ -2,14 +2,14 @@
 ###############################################################################
 #
 #    searchMappedPairs.py
-#
-#    Given a bam file, this srcipt will calculate where the mate of the read
-#    is mapped or unmappedand in which contig that mate is mapped to.  The aim
-#    being to generate a graphviz image and report file of all of the pairs that
-#    map to a different contigs and to no contigs at all.  Hopefully this will
+#    
+#    Given a bam file, this srcipt will calculate where the mate of the read 
+#    is mapped or unmappedand in which contig that mate is mapped to.  The aim 
+#    being to generate a graphviz image and report file of all of the pairs that 
+#    map to a different contigs and to no contigs at all.  Hopefully this will  
 #    help with assemblies and stuff like that to piece together contigs.
 #
-#    Copyright (C) 2011, 2012, 2014 Connor Skennerton
+#    Copyright (C) 2011, 2012 Connor Skennerton
 #
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -26,12 +26,58 @@
 #
 ###############################################################################
 
-import argparse
+from optparse import OptionParser
 import sys
 import pysam
-import networkx as nx
+from sets import Set
 from operator import itemgetter
 
+# create an edge object between two contigs
+# an edge needs to contain both of the contig names and the list of reads that have the edges
+# the position of the reads in each contig and the number of reads
+class ContigLinks:
+    def __init__(self,link):
+        self.links = []
+        self.links.append(link)  
+    
+    # add on a two element tuple to the links list
+    def append(self, link):
+        self.links.append(link)
+    
+    # return the number of links between the two contigs    
+    def size(self):
+        return len(self.links)
+    
+    # convert the set of links into a list
+    def to_list(self):
+        return list(self.links)
+    
+    # convert back to a set
+    def to_set(self, list):
+        self.links = set(list)
+    
+    def unique(self):
+        self.links = list(set(self.links))
+        
+    # sort by the first value of the tuple within the set
+    # requires that the set be first converted into a list
+    # since sets are unordered 
+    def sortByFirst(self):
+        self.links.sort(key = itemgetter(0))
+        
+    def sortBySecond(self):
+        self.links.sort(key = itemgetter(1))
+    
+    def findClusteredLinkPositions(self, z, n):
+        self.sortByFirst()
+        master_tmp_list = []
+        tmp_list = []
+        total_span = 0
+        #print "-------------------------------"
+        for i in range(len(self.links) - 1):
+            if total_span < z:
+                tmp_list.append(self.links[i])
+                total_span = self.links[i][0] - tmp_list[0][0]
 
 def getSubList(subFile):
     subList = set()
@@ -55,58 +101,19 @@ def findEndLinks(G, bamFile, contig, length, endLength=500):
             G.add_node(contig, length=length)
             G.add_node(mate_contig, length=bamFile.lengths[read.mrnm])
             addLink(G, contig, mate_contig)
-
-
-def addLink(G, contig, mate_contig):
-
-    if contig < mate_contig:
-        G.add_edge(contig, mate_contig)
-        try:
-            G[contig][mate_contig]['weight'] += 1
-        except:
-            G[contig][mate_contig]['weight'] = 1
-    else:
-        G.add_edge(mate_contig, contig)
-        try:
-            G[mate_contig][contig]['weight'] += 1
-        except:
-            G[mate_contig][contig]['weight'] = 1
-
-
 def checkLink(bamFile, read, length, contig):
     if isMated(read):
         if hasMissingMates(bamFile, read, contig):
             # mate is on a different contig
             return True
 
-# checks for a number of features for each aligned read.  If a read's mate is
-# on a different contig then it returns that contig name.  For all other
-# possibilities returns None
-def hasMissingMates(bamFile, alignedRead, contig):
-    mate_contig = bamFile.getrname(alignedRead.mrnm)
-    if (mate_contig != contig):
-        return True
-    return False
 
-# checks the position of the read and it's mate to see if they are on oposite
-# ends of a contig. Returns True if they are, False if not
-def isCircularLink(alignedReadPos, matePos, contigLength, endLength=500):
-    if ((alignedReadPos < endLength) and (matePos > contigLength - endLength)):
-        return True
-    elif (alignedReadPos > (contigLength - endLength) and (matePos < endLength)):
-        return True
-    else:
-        return False
-
-def isMated(alignedRead):
-    if alignedRead.is_paired:
-        if not alignedRead.mate_is_unmapped:
-            return True
-    return False
-
-
-if __name__ =='__main__':
-
+def getSubList(subFile):
+    f = open(subFile, 'r')
+    subList = []
+    for line in f:
+        subList.append(line.rstrip())
+    return subList
     # intialise the options parser
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("bam", help="the name of the input bam file")
@@ -117,8 +124,6 @@ if __name__ =='__main__':
             help="the number of links that two contigs must share for the links to even be considered 'real'")
     parser.add_argument('-m', '--min-contig-len', type=int, dest='minContigLen', default=500,
             help='The minimum length of the contig to be considered for adding links')
-
-    # get and check options
     args = parser.parse_args()
 
     endLength = 500
@@ -130,21 +135,20 @@ if __name__ =='__main__':
         bamFile = pysam.Samfile(args.bam, 'rb')
     except:
         print "The input file must be in bam format"
-        sys.exit(1)
+    if (opts.clusterWidth is not None):
+        cluster_size = opts.clusterWidth
 
-    G = nx.Graph()
-    for contig, length in zip(bamFile.references, bamFile.lengths):
+    if (opts.numOfLinks is not None):
+        min_links = opts.numOfLinks
 
-        if length < args.minContigLen:
-            continue
+    finder = LinkFinder(bamFile, cluster_size, min_links, opts.endOnly,
+            opts.prefix, doSubset, subList)
+    finder.iterateThroughContigs()
 
-        if contig not in sublist:
-            continue
+    finder.clusterLinks()
 
-        findEndLinks(G, bamFile, contig, length)
+    if opts.cytoscape is True:
+        finder.printCytoscape()
+    else:
+        finder.printGraph()
 
-    # now subset the graph based on the edge conditions
-
-    SG = nx.Graph( [ (u,v,d) for u,v,d in G.edges(data=True) if d ['weight'] >= args.numOfLinks] )
-
-    nx.write_gml(SG, args.outfile)
